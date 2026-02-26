@@ -1,3 +1,1 @@
-from django.db import models
-
-# Create your models here.
+from payments.domain.models import PaymentAttempt, PaymentStatus, WebhookEvent  # noqa: F401

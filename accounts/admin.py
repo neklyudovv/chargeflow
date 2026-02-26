@@ -1,3 +1,6 @@
 from django.contrib import admin
 
-# Register your models here.
+from accounts.models import Customer, Organization
+
+admin.site.register(Organization)
+admin.site.register(Customer)
