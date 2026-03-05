@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from core.events import DomainEvent
+from infrastructure.events import DomainEvent
 
 
 @dataclass

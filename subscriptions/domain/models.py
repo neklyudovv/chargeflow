@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 from accounts.models import Customer
 from plans.models import Plan
@@ -9,6 +10,18 @@ class SubscriptionStatus(models.TextChoices):
     ACTIVE = "active", "Active"
     OVERDUE = "overdue", "Overdue"
     CANCELED = "canceled", "Canceled"
+
+
+SUBSCRIPTION_TRANSITIONS: dict[str, set[str]] = {
+    SubscriptionStatus.TRIAL: {SubscriptionStatus.ACTIVE, SubscriptionStatus.CANCELED},
+    SubscriptionStatus.ACTIVE: {SubscriptionStatus.OVERDUE, SubscriptionStatus.CANCELED},
+    SubscriptionStatus.OVERDUE: {SubscriptionStatus.ACTIVE, SubscriptionStatus.CANCELED},
+    SubscriptionStatus.CANCELED: set(),
+}
+
+
+class InvalidStatusTransition(Exception):
+    pass
 
 
 class Subscription(models.Model):
@@ -34,3 +47,14 @@ class Subscription(models.Model):
 
     def __str__(self):
         return f"{self.customer} — {self.plan} ({self.status})"
+
+    def transition_to(self, new_status: str) -> None:
+        allowed = SUBSCRIPTION_TRANSITIONS.get(self.status, set())
+        if new_status not in allowed:
+            raise InvalidStatusTransition(
+                f"Cannot transition from '{self.status}' to '{new_status}'"
+            )
+        self.status = new_status
+        if new_status == SubscriptionStatus.CANCELED:
+            self.canceled_at = timezone.now()
+        self.save(update_fields=["status", "canceled_at", "updated_at"])
