@@ -1,6 +1,7 @@
 from django.db import models
+from django.utils import timezone
 
-from subscriptions.domain.models import Subscription
+from subscriptions.domain.models import Subscription, InvalidStatusTransition
 
 
 class InvoiceStatus(models.TextChoices):
@@ -10,6 +11,16 @@ class InvoiceStatus(models.TextChoices):
     FAILED = "failed", "Failed"
     OVERDUE = "overdue", "Overdue"
     CANCELED = "canceled", "Canceled"
+
+
+INVOICE_TRANSITIONS: dict[str, set[str]] = {
+    InvoiceStatus.DRAFT: {InvoiceStatus.ISSUED, InvoiceStatus.CANCELED},
+    InvoiceStatus.ISSUED: {InvoiceStatus.PAID, InvoiceStatus.FAILED, InvoiceStatus.OVERDUE, InvoiceStatus.CANCELED},
+    InvoiceStatus.FAILED: {InvoiceStatus.ISSUED, InvoiceStatus.CANCELED},
+    InvoiceStatus.OVERDUE: {InvoiceStatus.PAID, InvoiceStatus.CANCELED},
+    InvoiceStatus.PAID: set(),
+    InvoiceStatus.CANCELED: set(),
+}
 
 
 class Invoice(models.Model):
@@ -35,6 +46,19 @@ class Invoice(models.Model):
 
     def __str__(self):
         return f"Invoice #{self.pk} — {self.subscription.customer} ({self.status})"
+
+    def transition_to(self, new_status: str) -> None:
+        allowed = INVOICE_TRANSITIONS.get(self.status, set())
+        if new_status not in allowed:
+            raise InvalidStatusTransition(
+                f"Cannot transition from '{self.status}' to '{new_status}'"
+            )
+        self.status = new_status
+        if new_status == InvoiceStatus.ISSUED:
+            self.issued_at = timezone.now()
+        elif new_status == InvoiceStatus.PAID:
+            self.paid_at = timezone.now()
+        self.save(update_fields=["status", "issued_at", "paid_at", "updated_at"])
 
 
 class InvoiceLine(models.Model):
