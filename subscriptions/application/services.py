@@ -6,7 +6,7 @@ from django.utils import timezone
 from accounts.models import Customer
 from infrastructure.events import event_bus
 from invoices.application.services import InvoiceService
-from plans.models import Plan
+from plans.models import Plan, PlanStatus
 from subscriptions.domain.events import (
     SubscriptionActivated,
     SubscriptionCanceled,
@@ -25,6 +25,9 @@ class SubscriptionService:
     @staticmethod
     @transaction.atomic
     def create(customer: Customer, plan: Plan) -> Subscription:
+        if plan.status != PlanStatus.ACTIVE:
+            raise ValueError(f"Cannot subscribe to a plan with status '{plan.status}'")
+
         now = timezone.now()
         has_trial = plan.trial_period_days > 0
 
@@ -71,6 +74,10 @@ class SubscriptionService:
     @staticmethod
     @transaction.atomic
     def renew(subscription: Subscription) -> None:
+        if subscription.status != SubscriptionStatus.ACTIVE:
+            raise ValueError(
+                f"Cannot renew subscription with status '{subscription.status}'"
+            )
         now = timezone.now()
         subscription.current_period_start = now
         subscription.current_period_end = SubscriptionService._compute_period_end(now, subscription.plan)
