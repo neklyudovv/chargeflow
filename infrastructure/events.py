@@ -2,6 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable
+from logging import getLogger
 
 from django.db import transaction
 
@@ -26,7 +27,12 @@ class EventBus:
 
     def _dispatch(self, event: DomainEvent, handlers: list[Callable]) -> None:
         for handler in handlers:
-            handler(event)
+            try:
+                handler(event)
+            except Exception:
+                getLogger(__name__).exception(
+                    "Event handler %s failed for event %s", handler, event
+                )
 
 
 event_bus = EventBus()
