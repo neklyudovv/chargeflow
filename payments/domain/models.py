@@ -26,7 +26,7 @@ class PaymentAttempt(models.Model):
         app_label = "payments"
 
     def __str__(self):
-        return f"Payment #{self.pk} — {self.invoice} ({self.status})"
+        return f"Payment #{self.pk} - {self.invoice} ({self.status})"
 
 
 class WebhookEvent(models.Model):

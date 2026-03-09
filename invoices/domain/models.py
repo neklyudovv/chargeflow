@@ -45,7 +45,7 @@ class Invoice(models.Model):
         app_label = "invoices"
 
     def __str__(self):
-        return f"Invoice #{self.pk} — {self.subscription.customer} ({self.status})"
+        return f"Invoice #{self.pk} - {self.subscription.customer} ({self.status})"
 
     def transition_to(self, new_status: str) -> None:
         allowed = INVOICE_TRANSITIONS.get(self.status, set())
@@ -72,4 +72,4 @@ class InvoiceLine(models.Model):
         app_label = "invoices"
 
     def __str__(self):
-        return f"{self.description} — {self.amount}"
+        return f"{self.description} - {self.amount}"

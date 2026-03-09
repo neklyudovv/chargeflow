@@ -46,7 +46,7 @@ class Subscription(models.Model):
         app_label = "subscriptions"
 
     def __str__(self):
-        return f"{self.customer} — {self.plan} ({self.status})"
+        return f"{self.customer} - {self.plan} ({self.status})"
 
     def transition_to(self, new_status: str) -> None:
         allowed = SUBSCRIPTION_TRANSITIONS.get(self.status, set())

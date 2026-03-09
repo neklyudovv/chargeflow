@@ -19,7 +19,7 @@ class InvoiceService:
         )
         InvoiceLine.objects.create(
             invoice=invoice,
-            description=f"{subscription.plan.name} ({subscription.current_period_start.date()} — {subscription.current_period_end.date()})",
+            description=f"{subscription.plan.name} ({subscription.current_period_start.date()} - {subscription.current_period_end.date()})",
             amount=subscription.plan.price,
         )
         invoice.transition_to(InvoiceStatus.ISSUED)
