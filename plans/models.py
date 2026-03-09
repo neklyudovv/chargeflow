@@ -2,16 +2,21 @@ from django.db import models
 
 
 class PlanStatus(models.TextChoices):
-    ACTIVE = 'active', 'Active'
-    ARCHIVED = 'archived', 'Archived'
+    ACTIVE = "active", "Active"
+    ARCHIVED = "archived", "Archived"
+
 
 class PlanInterval(models.TextChoices):
-    DAY = 'day', 'Day'
-    WEEK = 'week', 'Week'
-    MONTH = 'month', 'Month'
-    YEAR = 'year', 'Year'
+    DAY = "day", "Day"
+    WEEK = "week", "Week"
+    MONTH = "month", "Month"
+    YEAR = "year", "Year"
+
 
 class Plan(models.Model):
+    organization = models.ForeignKey(
+        "accounts.Organization", on_delete=models.CASCADE, related_name="plans"
+    )
     name = models.CharField(max_length=255)
     description = models.TextField(default="", blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -23,4 +28,4 @@ class Plan(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.organization})"

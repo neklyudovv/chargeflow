@@ -1,5 +1,7 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, status, viewsets
+from rest_framework.authentication import BaseAuthentication
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -20,18 +22,30 @@ class PaymentAttemptViewSet(
     mixins.CreateModelMixin,
     viewsets.GenericViewSet,
 ):
-    queryset = PaymentAttempt.objects.select_related("invoice").all()
     serializer_class = PaymentAttemptSerializer
+
+    def get_queryset(self):
+        return PaymentAttempt.objects.select_related("invoice").filter(
+            invoice__subscription__customer__organization=self.request.user
+        )
 
     def create(self, request, *args, **kwargs):
         serializer = PaymentAttemptCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        invoice = get_object_or_404(Invoice, pk=serializer.validated_data["invoice_id"])
+        invoice = get_object_or_404(
+            Invoice,
+            pk=serializer.validated_data["invoice_id"],
+            subscription__customer__organization=request.user,
+        )
         payment = PaymentService.attempt(invoice)
         return Response(PaymentAttemptSerializer(payment).data, status=status.HTTP_201_CREATED)
 
 
 class WebhookView(APIView):
+    # Webhook is called by payment provider - no API key auth needed
+    authentication_classes: list[type[BaseAuthentication]] = []
+    permission_classes = [AllowAny]
+
     def post(self, request):
         signature = request.headers.get("X-Webhook-Signature", "")
         try:

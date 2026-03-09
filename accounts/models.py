@@ -9,6 +9,10 @@ class Organization(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    @property
+    def is_authenticated(self):
+        return True
+
     def __str__(self):
         return self.name
 
@@ -47,7 +51,6 @@ class ApiKey(models.Model):
         name: str = "Default",
         expires_at=None,
     ) -> tuple["ApiKey", str]:
-        """Creates a new ApiKey. Returns (instance, raw_key). raw_key shown only once."""
         raw_key = generate_raw_key()
         instance = cls.objects.create(
             organization=organization,

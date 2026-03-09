@@ -16,14 +16,26 @@ class SubscriptionViewSet(
     mixins.CreateModelMixin,
     viewsets.GenericViewSet,
 ):
-    queryset = Subscription.objects.select_related("customer", "plan").all()
     serializer_class = SubscriptionSerializer
+
+    def get_queryset(self):
+        return Subscription.objects.select_related("customer", "plan").filter(
+            customer__organization=self.request.user
+        )
 
     def create(self, request, *args, **kwargs):
         serializer = SubscriptionCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        customer = get_object_or_404(Customer, pk=serializer.validated_data["customer_id"])
-        plan = get_object_or_404(Plan, pk=serializer.validated_data["plan_id"])
+        customer = get_object_or_404(
+            Customer,
+            pk=serializer.validated_data["customer_id"],
+            organization=request.user,
+        )
+        plan = get_object_or_404(
+            Plan,
+            pk=serializer.validated_data["plan_id"],
+            organization=request.user,
+        )
         subscription = SubscriptionService.create(customer, plan)
         return Response(SubscriptionSerializer(subscription).data, status=status.HTTP_201_CREATED)
 

@@ -9,5 +9,11 @@ class InvoiceViewSet(
     mixins.RetrieveModelMixin,
     viewsets.GenericViewSet,
 ):
-    queryset = Invoice.objects.select_related("subscription").prefetch_related("lines").all()
     serializer_class = InvoiceSerializer
+
+    def get_queryset(self):
+        return (
+            Invoice.objects.select_related("subscription")
+            .prefetch_related("lines")
+            .filter(subscription__customer__organization=self.request.user)
+        )
