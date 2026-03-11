@@ -1,7 +1,6 @@
 from django.db import transaction
 
 from infrastructure.events import event_bus
-from invoices.application.services import InvoiceService
 from invoices.domain.models import Invoice
 from payments.domain.events import PaymentFailed, PaymentSucceeded, WebhookReceived
 from payments.domain.models import PaymentAttempt, PaymentStatus, WebhookEvent
@@ -22,13 +21,11 @@ class PaymentService:
             payment.status = PaymentStatus.SUCCESS
             payment.provider_response = {"status": "ok"}
             payment.save(update_fields=["status", "provider_response"])
-            InvoiceService.mark_paid(invoice)
             event_bus.publish(PaymentSucceeded(payment_attempt_id=payment.pk))
         else:
             payment.status = PaymentStatus.FAILED
             payment.provider_response = {"status": "declined"}
             payment.save(update_fields=["status", "provider_response"])
-            InvoiceService.mark_failed(invoice)
             event_bus.publish(PaymentFailed(payment_attempt_id=payment.pk))
 
         return payment
@@ -57,7 +54,7 @@ class PaymentService:
             return
 
         try:
-            payment = PaymentAttempt.objects.select_related("invoice").get(pk=payment_id)
+            payment = PaymentAttempt.objects.get(pk=payment_id)
         except PaymentAttempt.DoesNotExist:
             webhook.processed = True
             webhook.save(update_fields=["processed"])
@@ -68,13 +65,11 @@ class PaymentService:
             payment.status = PaymentStatus.SUCCESS
             payment.provider_response = payload
             payment.save(update_fields=["status", "provider_response"])
-            InvoiceService.mark_paid(payment.invoice)
             event_bus.publish(PaymentSucceeded(payment_attempt_id=payment.pk))
         elif status == "failed" and payment.status != PaymentStatus.FAILED:
             payment.status = PaymentStatus.FAILED
             payment.provider_response = payload
             payment.save(update_fields=["status", "provider_response"])
-            InvoiceService.mark_failed(payment.invoice)
             event_bus.publish(PaymentFailed(payment_attempt_id=payment.pk))
 
         webhook.processed = True

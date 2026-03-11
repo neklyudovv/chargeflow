@@ -12,7 +12,15 @@ from accounts.api.serializers import (
     OrganizationSerializer,
     RegisterSerializer,
 )
+from accounts.events import (
+    ApiKeyCreated,
+    ApiKeyRevoked,
+    CustomerCreated,
+    CustomerUpdated,
+    OrganizationCreated,
+)
 from accounts.models import ApiKey, Customer, Organization
+from infrastructure.events import event_bus
 
 
 class RegisterView(APIView):
@@ -31,6 +39,8 @@ class RegisterView(APIView):
 
         organization = Organization.objects.create(name=serializer.validated_data["name"])
         api_key_instance, raw_key = ApiKey.create_for_organization(organization, name="Default")
+        event_bus.publish(OrganizationCreated(organization_id=organization.pk))
+        event_bus.publish(ApiKeyCreated(api_key_id=api_key_instance.pk))
 
         return Response(
             {
@@ -81,6 +91,7 @@ class ApiKeyViewSet(
             name=serializer.validated_data["name"],
             expires_at=serializer.validated_data.get("expires_at"),
         )
+        event_bus.publish(ApiKeyCreated(api_key_id=api_key_instance.pk))
         return Response(
             {
                 **ApiKeySerializer(api_key_instance).data,
@@ -94,6 +105,7 @@ class ApiKeyViewSet(
         api_key = self.get_object()
         api_key.revoked = True
         api_key.save(update_fields=["revoked"])
+        event_bus.publish(ApiKeyRevoked(api_key_id=api_key.pk))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -112,4 +124,9 @@ class CustomerViewSet(
         )
 
     def perform_create(self, serializer):
-        serializer.save(organization=self.request.user)
+        customer = serializer.save(organization=self.request.user)
+        event_bus.publish(CustomerCreated(customer_id=customer.pk))
+
+    def perform_update(self, serializer):
+        customer = serializer.save()
+        event_bus.publish(CustomerUpdated(customer_id=customer.pk))

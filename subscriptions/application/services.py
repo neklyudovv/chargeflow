@@ -5,7 +5,6 @@ from django.utils import timezone
 
 from accounts.models import Customer
 from infrastructure.events import event_bus
-from invoices.application.services import InvoiceService
 from plans.models import Plan, PlanStatus
 from subscriptions.domain.events import (
     SubscriptionActivated,
@@ -19,7 +18,12 @@ from subscriptions.domain.models import Subscription, SubscriptionStatus
 class SubscriptionService:
     @staticmethod
     def _compute_period_end(start, plan: Plan):
-        deltas = {"day": timedelta(days=1), "week": timedelta(weeks=1), "month": timedelta(days=30), "year": timedelta(days=365)}
+        deltas = {
+            "day": timedelta(days=1),
+            "week": timedelta(weeks=1),
+            "month": timedelta(days=30),
+            "year": timedelta(days=365),
+        }
         return start + deltas.get(plan.interval, timedelta(days=30))
 
     @staticmethod
@@ -31,26 +35,19 @@ class SubscriptionService:
         now = timezone.now()
         has_trial = plan.trial_period_days > 0
 
-        if has_trial:
-            status = SubscriptionStatus.TRIAL
-            period_end = now + timedelta(days=plan.trial_period_days)
-        else:
-            status = SubscriptionStatus.ACTIVE
-            period_end = SubscriptionService._compute_period_end(now, plan)
-
         subscription = Subscription.objects.create(
             customer=customer,
             plan=plan,
-            status=status,
+            status=SubscriptionStatus.TRIAL if has_trial else SubscriptionStatus.ACTIVE,
             current_period_start=now,
-            current_period_end=period_end,
+            current_period_end=(
+                now + timedelta(days=plan.trial_period_days)
+                if has_trial
+                else SubscriptionService._compute_period_end(now, plan)
+            ),
         )
 
         event_bus.publish(SubscriptionCreated(subscription_id=subscription.pk))
-
-        if not has_trial:
-            InvoiceService.generate_for_subscription(subscription)
-
         return subscription
 
     @staticmethod
@@ -63,7 +60,6 @@ class SubscriptionService:
         subscription.save(update_fields=["current_period_start", "current_period_end", "updated_at"])
 
         event_bus.publish(SubscriptionActivated(subscription_id=subscription.pk))
-        InvoiceService.generate_for_subscription(subscription)
 
     @staticmethod
     @transaction.atomic
@@ -75,13 +71,11 @@ class SubscriptionService:
     @transaction.atomic
     def renew(subscription: Subscription) -> None:
         if subscription.status != SubscriptionStatus.ACTIVE:
-            raise ValueError(
-                f"Cannot renew subscription with status '{subscription.status}'"
-            )
+            raise ValueError(f"Cannot renew subscription with status '{subscription.status}'")
+
         now = timezone.now()
         subscription.current_period_start = now
         subscription.current_period_end = SubscriptionService._compute_period_end(now, subscription.plan)
         subscription.save(update_fields=["current_period_start", "current_period_end", "updated_at"])
 
         event_bus.publish(SubscriptionRenewed(subscription_id=subscription.pk))
-        InvoiceService.generate_for_subscription(subscription)
