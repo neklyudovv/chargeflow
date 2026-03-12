@@ -6,6 +6,8 @@ from logging import getLogger
 
 from django.db import transaction
 
+logger = getLogger(__name__)
+
 
 @dataclass
 class DomainEvent:
@@ -21,6 +23,7 @@ class EventBus:
 
     def publish(self, event: DomainEvent) -> None:
         handlers = self._handlers.get(type(event), [])
+        logger.info(f"Event published: {event}")
         if not handlers:
             return
         transaction.on_commit(lambda: self._dispatch(event, handlers))
@@ -30,9 +33,7 @@ class EventBus:
             try:
                 handler(event)
             except Exception:
-                getLogger(__name__).exception(
-                    "Event handler %s failed for event %s", handler, event
-                )
+                logger.exception(f"Event handler {handler} failed for event {event}")
 
 
 event_bus = EventBus()
