@@ -1,7 +1,11 @@
-from rest_framework import serializers
+from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
+from rest_framework import serializers
 
 from accounts.models import ApiKey, Customer, Organization
+
+User = get_user_model()
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -12,7 +16,28 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
 
 class RegisterSerializer(serializers.Serializer):
-    name = serializers.CharField(max_length=255)
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate_email(self, value):
+        if User.objects.filter(email__iexact=value.strip()).exists():
+            raise serializers.ValidationError("This email is already registered.")
+        return value.strip().lower()
+
+    def validate_password(self, value):
+        validate_password(value)
+        return value
+
+
+class OrganizationCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organization
+        fields = ["name"]
+
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
 
 
 class ApiKeySerializer(serializers.ModelSerializer):

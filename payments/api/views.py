@@ -5,6 +5,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.request_context import get_request_organization
 from invoices.domain.models import Invoice
 from payments.api.serializers import (
     PaymentAttemptCreateSerializer,
@@ -25,17 +26,26 @@ class PaymentAttemptViewSet(
     serializer_class = PaymentAttemptSerializer
 
     def get_queryset(self):
+        org = get_request_organization(self.request)
+        if org is None:
+            return PaymentAttempt.objects.none()
         return PaymentAttempt.objects.select_related("invoice").filter(
-            invoice__subscription__customer__organization=self.request.user
+            invoice__subscription__customer__organization=org
         )
 
     def create(self, request, *args, **kwargs):
+        org = get_request_organization(request)
+        if org is None:
+            return Response(
+                {"detail": "No organization in scope."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         serializer = PaymentAttemptCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         invoice = get_object_or_404(
             Invoice,
             pk=serializer.validated_data["invoice_id"],
-            subscription__customer__organization=request.user,
+            subscription__customer__organization=org,
         )
         payment = PaymentService.attempt(invoice)
         return Response(PaymentAttemptSerializer(payment).data, status=status.HTTP_201_CREATED)

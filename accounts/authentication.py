@@ -6,8 +6,8 @@ from accounts.models import ApiKey
 
 class ApiKeyAuthentication(BaseAuthentication):
     """
-    Authenticates requests using an API key passed in the Authorization header.
-    Expected format: Authorization: Bearer cf_<token>
+    Service-to-service: Authorization: Bearer cf_<secret>
+    Sets request.organization and authenticates as the owning User (for permissions).
     """
 
     def authenticate(self, request):
@@ -23,4 +23,5 @@ class ApiKeyAuthentication(BaseAuthentication):
         if organization is None:
             raise AuthenticationFailed("Invalid or expired API key")
 
-        return (organization, None)
+        request.organization = organization
+        return (organization.owner, None)

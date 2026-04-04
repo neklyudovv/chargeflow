@@ -1,6 +1,7 @@
 from rest_framework import viewsets
-from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 
+from accounts.request_context import get_request_organization
 from infrastructure.events import event_bus
 from plans.api.serializers import PlanSerializer
 from plans.events import PlanArchived, PlanCreated, PlanDeleted, PlanUpdated
@@ -11,10 +12,16 @@ class PlanViewSet(viewsets.ModelViewSet):
     serializer_class = PlanSerializer
 
     def get_queryset(self):
-        return Plan.objects.filter(organization=self.request.user)
+        org = get_request_organization(self.request)
+        if org is None:
+            return Plan.objects.none()
+        return Plan.objects.filter(organization=org)
 
     def perform_create(self, serializer):
-        plan = serializer.save(organization=self.request.user)
+        org = get_request_organization(self.request)
+        if org is None:
+            raise ValidationError("No organization in scope.")
+        plan = serializer.save(organization=org)
         event_bus.publish(PlanCreated(plan_id=plan.pk))
 
     def perform_update(self, serializer):

@@ -1,17 +1,33 @@
+from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils import timezone
 
 from accounts.tokens import KEY_PREFIX, KEY_PREFIX_LENGTH, generate_raw_key, hash_key
 
 
+class User(AbstractUser):
+    email = models.EmailField(unique=True)
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = []
+
+    class Meta:
+        db_table = "accounts_user"
+
+    def save(self, *args, **kwargs):
+        if not self.username:
+            self.username = self.email
+        super().save(*args, **kwargs)
+
+
 class Organization(models.Model):
+    owner = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="organizations",
+    )
     name = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
-    @property
-    def is_authenticated(self):
-        return True
 
     def __str__(self):
         return self.name
@@ -42,7 +58,7 @@ class ApiKey(models.Model):
     revoked = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.organization} — {self.name} ({self.prefix}...)"
+        return f"{self.organization} - {self.name} ({self.prefix}...)"
 
     @classmethod
     def create_for_organization(
@@ -67,7 +83,7 @@ class ApiKey(models.Model):
             return None
         prefix = raw_key[:KEY_PREFIX_LENGTH]
         try:
-            api_key = cls.objects.select_related("organization").get(
+            api_key = cls.objects.select_related("organization", "organization__owner").get(
                 prefix=prefix,
                 key_hash=hash_key(raw_key),
                 revoked=False,
