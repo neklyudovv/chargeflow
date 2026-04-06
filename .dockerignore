@@ -1,0 +1,11 @@
+venv
+__pycache__
+*.py[cod]
+.git
+.gitignore
+db.sqlite3
+db.sqlite3-journal
+frontend/node_modules
+*.md
+.env
+.venv

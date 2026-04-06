@@ -1,0 +1,9 @@
+services:
+  web:
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    environment:
+      - DJANGO_DEBUG=True
+    volumes:
+      - .:/app
+    ports: !override
+      - "127.0.0.1:8000:8000"
