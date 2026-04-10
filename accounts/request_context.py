@@ -1,4 +1,5 @@
 from django.http import HttpRequest
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from accounts.models import Organization
 
@@ -10,8 +11,9 @@ def get_request_organization(request: HttpRequest) -> Organization | None:
     - API key auth: ``request.organization`` is set by authentication.
     - Token auth: optional header ``X-Organization-Id`` (must be owned by the user).
       If the user has exactly one organization and the header is omitted, that org is used.
-      If the user has zero or multiple organizations and the header is omitted, returns None
-      (list endpoints return empty; create requires an explicit org scope).
+      Raises ValidationError when the user owns multiple orgs and no header is provided.
+      Raises PermissionDenied when the header references an org the user does not own.
+      Returns None only when the user has no organizations yet.
     """
     org = getattr(request, "organization", None)
     if org is not None:
@@ -26,9 +28,13 @@ def get_request_organization(request: HttpRequest) -> Organization | None:
         try:
             return Organization.objects.get(pk=int(raw_id), owner=user)
         except (Organization.DoesNotExist, ValueError, TypeError):
-            return None
+            raise PermissionDenied("Organization not found or not accessible.")
 
-    qs = user.organizations.all()
-    if qs.count() == 1:
-        return qs.first()
+    orgs = list(user.organizations.all()[:2])
+    if len(orgs) == 1:
+        return orgs[0]
+    if len(orgs) > 1:
+        raise ValidationError(
+            "Multiple organizations found. Provide the X-Organization-Id header to specify which one."
+        )
     return None
