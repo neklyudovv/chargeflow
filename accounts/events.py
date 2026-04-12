@@ -26,3 +26,13 @@ class ApiKeyCreated(DomainEvent):
 @dataclass
 class ApiKeyRevoked(DomainEvent):
     api_key_id: int = 0
+
+
+@dataclass
+class MemberInvited(DomainEvent):
+    invitation_id: int = 0
+
+
+@dataclass
+class MemberJoined(DomainEvent):
+    membership_id: int = 0

@@ -3,7 +3,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 from rest_framework import serializers
 
-from accounts.models import ApiKey, Customer, Organization
+from accounts.models import ApiKey, Customer, Invitation, Organization, OrganizationMembership
 
 User = get_user_model()
 
@@ -63,3 +63,30 @@ class CustomerSerializer(serializers.ModelSerializer):
         model = Customer
         fields = ["id", "email", "name", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class OrganizationMembershipSerializer(serializers.ModelSerializer):
+    user_email = serializers.EmailField(source="user.email", read_only=True)
+
+    class Meta:
+        model = OrganizationMembership
+        fields = ["id", "user_email", "role", "joined_at"]
+        read_only_fields = ["id", "joined_at"]
+
+
+class InvitationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Invitation
+        fields = ["id", "email", "role", "expires_at", "accepted_at", "created_at"]
+        read_only_fields = ["id", "expires_at", "accepted_at", "created_at"]
+
+
+class InvitationCreateSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    role = serializers.ChoiceField(
+        choices=[OrganizationMembership.Role.ADMIN, OrganizationMembership.Role.MEMBER]
+    )
+
+
+class AcceptInvitationSerializer(serializers.Serializer):
+    token = serializers.CharField()

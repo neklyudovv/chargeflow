@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.authentication import BaseAuthentication
@@ -10,11 +11,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.api.serializers import (
+    AcceptInvitationSerializer,
     ApiKeyCreateSerializer,
     ApiKeySerializer,
     CustomerSerializer,
+    InvitationCreateSerializer,
+    InvitationSerializer,
     LoginSerializer,
     OrganizationCreateSerializer,
+    OrganizationMembershipSerializer,
     OrganizationSerializer,
     RegisterSerializer,
 )
@@ -23,9 +28,12 @@ from accounts.events import (
     ApiKeyRevoked,
     CustomerCreated,
     CustomerUpdated,
+    MemberInvited,
+    MemberJoined,
     OrganizationCreated,
 )
-from accounts.models import ApiKey, Customer, Organization, User
+from accounts.models import ApiKey, Customer, Invitation, Organization, OrganizationMembership, User
+from accounts.permissions import IsOrgAdmin
 from accounts.request_context import get_request_organization
 from infrastructure.events import event_bus
 
@@ -117,6 +125,14 @@ class OrganizationViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewse
         serializer = OrganizationCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         organization = serializer.save(owner=request.user)
+        # Organization.owner tracks accountability (billing, legal).
+        # Access is governed by membership — get_request_organization queries memberships,
+        # not owner, so the creator must have a record here too.
+        OrganizationMembership.objects.create(
+            organization=organization,
+            user=request.user,
+            role=OrganizationMembership.Role.OWNER,
+        )
         api_key_instance, raw_key = ApiKey.create_for_organization(organization, name="Default")
         event_bus.publish(OrganizationCreated(organization_id=organization.pk))
         event_bus.publish(ApiKeyCreated(api_key_id=api_key_instance.pk))
@@ -207,3 +223,81 @@ class CustomerViewSet(
     def perform_update(self, serializer):
         customer = serializer.save()
         event_bus.publish(CustomerUpdated(customer_id=customer.pk))
+
+
+class InvitationViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsAuthenticated, IsOrgAdmin]
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return InvitationCreateSerializer
+        return InvitationSerializer
+
+    def get_queryset(self):
+        org = get_request_organization(self.request)
+        if org is None:
+            return Invitation.objects.none()
+        return Invitation.objects.filter(organization=org, accepted_at__isnull=True).order_by("-created_at")
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        org = get_request_organization(request)
+        serializer = InvitationCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data["email"]
+        role = serializer.validated_data["role"]
+
+        if OrganizationMembership.objects.filter(organization=org, user__email=email).exists():
+            raise ValidationError({"email": "This user is already a member of this organization."})
+
+        invitation = Invitation.create_for_organization(org, email, role)
+        event_bus.publish(MemberInvited(invitation_id=invitation.pk))
+        return Response(
+            {
+                **InvitationSerializer(invitation).data,
+                "token": invitation.token,
+                "note": "In production this token would be emailed. Send it to the invitee to accept.",
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class AcceptInvitationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = AcceptInvitationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            invitation = Invitation.objects.select_related("organization").get(
+                token=serializer.validated_data["token"]
+            )
+        except Invitation.DoesNotExist:
+            raise ValidationError({"token": "Invalid invitation token."})
+
+        if invitation.is_accepted:
+            raise ValidationError({"token": "This invitation has already been accepted."})
+        if invitation.is_expired:
+            raise ValidationError({"token": "This invitation has expired."})
+        if OrganizationMembership.objects.filter(
+            organization=invitation.organization, user=request.user
+        ).exists():
+            raise ValidationError({"token": "You are already a member of this organization."})
+
+        membership = OrganizationMembership.objects.create(
+            organization=invitation.organization,
+            user=request.user,
+            role=invitation.role,
+        )
+        invitation.accepted_at = timezone.now()
+        invitation.save(update_fields=["accepted_at"])
+
+        event_bus.publish(MemberJoined(membership_id=membership.pk))
+        return Response(OrganizationMembershipSerializer(membership).data, status=status.HTTP_201_CREATED)
