@@ -6,6 +6,7 @@ from accounts.api.views import (
     ApiKeyViewSet,
     CustomerViewSet,
     InvitationViewSet,
+    MemberViewSet,
     MeView,
     OrganizationViewSet,
 )
@@ -14,6 +15,7 @@ router = DefaultRouter()
 router.register("keys", ApiKeyViewSet, basename="api-keys")
 router.register("customers", CustomerViewSet, basename="customers")
 router.register("organizations", OrganizationViewSet, basename="organizations")
+router.register("members", MemberViewSet, basename="members")
 router.register("invitations", InvitationViewSet, basename="invitations")
 
 urlpatterns = [

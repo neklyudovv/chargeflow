@@ -9,10 +9,21 @@ User = get_user_model()
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
+    my_role = serializers.SerializerMethodField()
+
     class Meta:
         model = Organization
-        fields = ["id", "name", "created_at", "updated_at"]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        fields = ["id", "name", "created_at", "updated_at", "my_role"]
+        read_only_fields = ["id", "created_at", "updated_at", "my_role"]
+
+    def get_my_role(self, obj):
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return None
+        try:
+            return OrganizationMembership.objects.get(organization=obj, user=request.user).role
+        except OrganizationMembership.DoesNotExist:
+            return None
 
 
 class RegisterSerializer(serializers.Serializer):

@@ -94,16 +94,24 @@ class LoginView(APIView):
 
 
 class MeView(APIView):
-    """GET /api/accounts/me/ - user and resolved organization scope (may be null)."""
+    """GET /api/accounts/me/ - user, resolved organization scope, and role."""
 
     def get(self, request):
-        organization = get_request_organization(request)
+        try:
+            organization = get_request_organization(request)
+            membership = getattr(request, "membership", None)
+        except Exception:
+            organization = None
+            membership = None
         return Response(
             {
                 "user": {"id": request.user.id, "email": request.user.email},
                 "organization": (
-                    OrganizationSerializer(organization).data if organization else None
+                    OrganizationSerializer(organization, context={"request": request}).data
+                    if organization
+                    else None
                 ),
+                "role": membership.role if membership else None,
             }
         )
 
@@ -113,7 +121,9 @@ class OrganizationViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewse
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Organization.objects.filter(owner=self.request.user).order_by("-created_at")
+        return Organization.objects.filter(
+            memberships__user=self.request.user
+        ).order_by("-created_at")
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -223,6 +233,17 @@ class CustomerViewSet(
     def perform_update(self, serializer):
         customer = serializer.save()
         event_bus.publish(CustomerUpdated(customer_id=customer.pk))
+
+
+class MemberViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    serializer_class = OrganizationMembershipSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        org = get_request_organization(self.request)
+        if org is None:
+            return OrganizationMembership.objects.none()
+        return OrganizationMembership.objects.select_related("user").filter(organization=org)
 
 
 class InvitationViewSet(
