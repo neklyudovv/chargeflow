@@ -307,6 +307,8 @@ class AcceptInvitationView(APIView):
             raise ValidationError({"token": "This invitation has already been accepted."})
         if invitation.is_expired:
             raise ValidationError({"token": "This invitation has expired."})
+        if invitation.email != request.user.email:
+            raise ValidationError({"token": "This invitation was sent to a different email address."})
         if OrganizationMembership.objects.filter(
             organization=invitation.organization, user=request.user
         ).exists():
