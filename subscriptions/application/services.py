@@ -1,3 +1,4 @@
+import calendar
 from datetime import timedelta
 
 from django.db import transaction
@@ -17,14 +18,24 @@ from subscriptions.domain.models import Subscription, SubscriptionStatus
 
 class SubscriptionService:
     @staticmethod
+    def _add_months(dt, months):
+        total = dt.month - 1 + months
+        year = dt.year + total // 12
+        month = total % 12 + 1
+        day = min(dt.day, calendar.monthrange(year, month)[1])
+        return dt.replace(year=year, month=month, day=day)
+
+    @staticmethod
     def _compute_period_end(start, plan: Plan):
-        deltas = {
-            "day": timedelta(days=1),
-            "week": timedelta(weeks=1),
-            "month": timedelta(days=30),
-            "year": timedelta(days=365),
-        }
-        return start + deltas.get(plan.interval, timedelta(days=30))
+        if plan.interval == "day":
+            return start + timedelta(days=1)
+        if plan.interval == "week":
+            return start + timedelta(weeks=1)
+        if plan.interval == "month":
+            return SubscriptionService._add_months(start, 1)
+        if plan.interval == "year":
+            return SubscriptionService._add_months(start, 12)
+        return start + timedelta(days=30)
 
     @staticmethod
     @transaction.atomic
