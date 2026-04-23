@@ -167,7 +167,23 @@ CORS_ALLOWED_ORIGINS = [
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+        },
+    },
+    "formatters": {
+        "simple": {
+            "format": "{levelname} {name} {message}",
+            "style": "{",
+        },
+    },
     "loggers": {
-        "infrastructure.events": {"level": "INFO"},
+        "infrastructure": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }
