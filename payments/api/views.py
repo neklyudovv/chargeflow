@@ -12,7 +12,7 @@ from payments.api.serializers import (
     PaymentAttemptSerializer,
     WebhookSerializer,
 )
-from payments.application.services import PaymentService
+from payments.application.services import InvoiceNotPayable, PaymentService
 from payments.domain.models import PaymentAttempt
 from payments.infrastructure.signature import WebhookSignatureError, verify_webhook_signature
 
@@ -47,7 +47,10 @@ class PaymentAttemptViewSet(
             pk=serializer.validated_data["invoice_id"],
             subscription__customer__organization=org,
         )
-        payment = PaymentService.attempt(invoice)
+        try:
+            payment = PaymentService.attempt(invoice)
+        except InvoiceNotPayable as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(PaymentAttemptSerializer(payment).data, status=status.HTTP_201_CREATED)
 
 

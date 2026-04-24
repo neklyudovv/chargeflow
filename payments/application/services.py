@@ -1,15 +1,23 @@
 from django.db import transaction
 
 from infrastructure.events import event_bus
-from invoices.domain.models import Invoice
+from invoices.domain.models import PAYABLE_INVOICE_STATUSES, Invoice
 from payments.domain.events import PaymentFailed, PaymentSucceeded, WebhookReceived
 from payments.domain.models import PaymentAttempt, PaymentStatus, WebhookEvent
+
+
+class InvoiceNotPayable(Exception):
+    """Raised when a payment is attempted against an invoice in a non-payable state."""
 
 
 class PaymentService:
     @staticmethod
     @transaction.atomic
     def attempt(invoice: Invoice) -> PaymentAttempt:
+        if invoice.status not in PAYABLE_INVOICE_STATUSES:
+            raise InvoiceNotPayable(
+                f"Cannot attempt payment on invoice in status '{invoice.status}'"
+            )
         payment = PaymentAttempt.objects.create(
             invoice=invoice,
             amount=invoice.total,

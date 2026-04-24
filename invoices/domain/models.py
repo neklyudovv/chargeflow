@@ -13,6 +13,14 @@ class InvoiceStatus(models.TextChoices):
     CANCELED = "canceled", "Canceled"
 
 
+# Statuses from which a payment attempt is allowed (initial charge or retry).
+PAYABLE_INVOICE_STATUSES: set[str] = {
+    InvoiceStatus.ISSUED,
+    InvoiceStatus.FAILED,
+    InvoiceStatus.OVERDUE,
+}
+
+
 INVOICE_TRANSITIONS: dict[str, set[str]] = {
     InvoiceStatus.DRAFT: {InvoiceStatus.ISSUED, InvoiceStatus.CANCELED},
     InvoiceStatus.ISSUED: {InvoiceStatus.PAID, InvoiceStatus.FAILED, InvoiceStatus.OVERDUE, InvoiceStatus.CANCELED},
