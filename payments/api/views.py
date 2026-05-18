@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.permissions import AllowAny
@@ -59,6 +60,10 @@ class WebhookView(APIView):
     authentication_classes: list[type[BaseAuthentication]] = []
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        request=WebhookSerializer,
+        responses={200: OpenApiResponse(description="Event acknowledged.")},
+    )
     def post(self, request):
         signature = request.headers.get("X-Webhook-Signature", "")
         try:

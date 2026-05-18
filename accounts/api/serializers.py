@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from accounts.models import ApiKey, Customer, Invitation, Organization, OrganizationMembership
@@ -16,6 +18,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "created_at", "updated_at", "my_role"]
         read_only_fields = ["id", "created_at", "updated_at", "my_role"]
 
+    @extend_schema_field(OpenApiTypes.STR)
     def get_my_role(self, obj):
         request = self.context.get("request")
         if request is None or not request.user.is_authenticated:

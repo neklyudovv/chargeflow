@@ -1,3 +1,4 @@
+from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -25,3 +26,18 @@ class ApiKeyAuthentication(BaseAuthentication):
 
         request.organization = organization
         return (organization.owner, None)
+
+
+class ApiKeyAuthenticationScheme(OpenApiAuthenticationExtension):
+    """Describes ApiKeyAuthentication for the OpenAPI schema (Swagger 'Authorize')."""
+
+    target_class = "accounts.authentication.ApiKeyAuthentication"
+    name = "ApiKeyAuth"
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "cf_<secret>",
+            "description": "Service-to-service API key: `Authorization: Bearer cf_<secret>`",
+        }

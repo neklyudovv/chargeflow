@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
+    'drf_spectacular',
     'corsheaders',
     'accounts',
     'plans',
@@ -158,6 +159,17 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Chargeflow API",
+    "DESCRIPTION": "Modular Django billing engine - plans, subscriptions, invoices, and payments.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+        "RoleEnum": "accounts.models.OrganizationMembership.Role",
+    },
 }
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG

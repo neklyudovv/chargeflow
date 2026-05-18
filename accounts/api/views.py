@@ -1,6 +1,7 @@
 from django.contrib.auth import authenticate
 from django.db import transaction
 from django.utils import timezone
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.authentication import BaseAuthentication
@@ -46,6 +47,10 @@ class RegisterView(APIView):
     authentication_classes: list[type[BaseAuthentication]] = []
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        request=RegisterSerializer,
+        responses={201: OpenApiResponse(description="Returns an auth token and the created user.")},
+    )
     @transaction.atomic
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -79,6 +84,10 @@ class LoginView(APIView):
     authentication_classes: list[type[BaseAuthentication]] = []
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        request=LoginSerializer,
+        responses={200: OpenApiResponse(description="Returns an auth token.")},
+    )
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -96,6 +105,9 @@ class LoginView(APIView):
 class MeView(APIView):
     """GET /api/accounts/me/ - user, resolved organization scope, and role."""
 
+    @extend_schema(
+        responses={200: OpenApiResponse(description="Current user, resolved organization, and role.")}
+    )
     def get(self, request):
         try:
             organization = get_request_organization(request)
@@ -291,6 +303,10 @@ class InvitationViewSet(
 class AcceptInvitationView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=AcceptInvitationSerializer,
+        responses={201: OrganizationMembershipSerializer},
+    )
     @transaction.atomic
     def post(self, request):
         serializer = AcceptInvitationSerializer(data=request.data)
