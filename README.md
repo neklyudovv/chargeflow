@@ -29,6 +29,7 @@ Chargeflow is a modular Django billing engine that manages the full subscription
 * **SQLite** - zero-config database for local development
 * **Docker** - containerized deployment via docker-compose
 * **Github Actions** - CI
+* **drf-spectacular** - OpenAPI 3 schema and interactive Swagger / Redoc docs
 * **Pytest** (+ pytest-django, pytest-cov) - integration and unit testing
 * **Token & API-key auth** - user sessions and service-to-service access
 
@@ -93,6 +94,14 @@ Every authenticated request resolves an organization (API key -> `X-Organization
 * PostgreSQL database
 
 ## API Endpoints
+
+Interactive documentation is generated from the code with **drf-spectacular** and served at:
+
+* **Swagger UI** — `/api/docs/`
+* **Redoc** — `/api/redoc/`
+* **OpenAPI schema** — `/api/schema/`
+
+The endpoints below are grouped by domain.
 
 ### Authentication (`/api/auth`)
 * `POST /api/auth/register/` - Register a user (and create their organization)
