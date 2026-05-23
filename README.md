@@ -10,7 +10,7 @@
 ![pytest](https://img.shields.io/badge/pytest-8.3-0A9EDC?logo=pytest&logoColor=white)
 
 ![CI](https://github.com/neklyudovv/chargeflow/actions/workflows/ci.yml/badge.svg)
-![coverage](https://img.shields.io/badge/coverage-83%25-brightgreen)
+![coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)
 
 Chargeflow is a modular Django billing engine that manages the full subscription lifecycle - plans, subscriptions, invoices, and payments - driven by a domain-event bus with transactional integrity, whose handlers run as retriable Celery background tasks.
 
