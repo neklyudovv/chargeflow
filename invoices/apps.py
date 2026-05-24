@@ -6,13 +6,7 @@ class InvoicesConfig(AppConfig):
 
     def ready(self):
         from infrastructure.events import event_bus
-        from invoices.handlers import (
-            on_payment_failed,
-            on_payment_succeeded,
-            on_subscription_activated,
-            on_subscription_created,
-            on_subscription_renewed,
-        )
+        from invoices import tasks
         from payments.domain.events import PaymentFailed, PaymentSucceeded
         from subscriptions.domain.events import (
             SubscriptionActivated,
@@ -20,8 +14,25 @@ class InvoicesConfig(AppConfig):
             SubscriptionRenewed,
         )
 
-        event_bus.subscribe(SubscriptionCreated, on_subscription_created)
-        event_bus.subscribe(SubscriptionActivated, on_subscription_activated)
-        event_bus.subscribe(SubscriptionRenewed, on_subscription_renewed)
-        event_bus.subscribe(PaymentSucceeded, on_payment_succeeded)
-        event_bus.subscribe(PaymentFailed, on_payment_failed)
+        # The bus stays the router; each handler now enqueues a Celery task
+        # (event -> task happens here, inside the subscription registration).
+        event_bus.subscribe(
+            SubscriptionCreated,
+            lambda e: tasks.generate_invoice_for_subscription.delay(e.subscription_id),
+        )
+        event_bus.subscribe(
+            SubscriptionActivated,
+            lambda e: tasks.generate_invoice_for_subscription.delay(e.subscription_id),
+        )
+        event_bus.subscribe(
+            SubscriptionRenewed,
+            lambda e: tasks.generate_invoice_for_subscription.delay(e.subscription_id),
+        )
+        event_bus.subscribe(
+            PaymentSucceeded,
+            lambda e: tasks.mark_invoice_paid.delay(e.payment_attempt_id),
+        )
+        event_bus.subscribe(
+            PaymentFailed,
+            lambda e: tasks.mark_invoice_failed.delay(e.payment_attempt_id),
+        )
