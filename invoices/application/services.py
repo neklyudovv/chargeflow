@@ -49,7 +49,9 @@ class InvoiceService:
     @staticmethod
     @transaction.atomic
     def mark_failed(invoice: Invoice) -> None:
-        if invoice.status == InvoiceStatus.FAILED:
+        # An OVERDUE invoice is still payable, but dunning has already given up
+        # on it: a further rejection records the attempt and leaves it OVERDUE.
+        if invoice.status != InvoiceStatus.ISSUED:
             return
         invoice.transition_to(InvoiceStatus.FAILED)
         event_bus.publish(InvoiceFailed(invoice_id=invoice.pk))

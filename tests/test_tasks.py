@@ -46,6 +46,28 @@ def test_mark_paid_is_idempotent(invoice):
     assert invoice.status == InvoiceStatus.PAID
 
 
+def test_mark_failed_keeps_overdue_invoice_overdue(invoice):
+    # dunning already gave up on this one; another rejected charge must not
+    # walk it back into FAILED (and must not raise)
+    _force_status(invoice, InvoiceStatus.OVERDUE)
+
+    InvoiceService.mark_failed(invoice)
+
+    invoice.refresh_from_db()
+    assert invoice.status == InvoiceStatus.OVERDUE
+
+
+def test_late_success_pays_a_failed_invoice(invoice):
+    # provider confirms a charge we had locally rejected - the invoice must
+    # still close as paid
+    _force_status(invoice, InvoiceStatus.FAILED)
+
+    InvoiceService.mark_paid(invoice)
+
+    invoice.refresh_from_db()
+    assert invoice.status == InvoiceStatus.PAID
+
+
 def test_attempt_does_not_stack_duplicate(invoice):
     _force_status(invoice, InvoiceStatus.ISSUED)
 
