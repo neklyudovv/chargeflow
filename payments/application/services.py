@@ -18,6 +18,12 @@ class PaymentService:
             raise InvoiceNotPayable(
                 f"Cannot attempt payment on invoice in status '{invoice.status}'"
             )
+        existing = invoice.payment_attempts.filter(
+            status__in=[PaymentStatus.PENDING, PaymentStatus.SUCCESS]
+        ).first()
+        if existing:
+            # charge is already pending or has succeeded for this invoice;
+            return existing
         payment = PaymentAttempt.objects.create(
             invoice=invoice,
             amount=invoice.total,
