@@ -48,3 +48,14 @@ class InvoiceService:
             return
         invoice.transition_to(InvoiceStatus.FAILED)
         event_bus.publish(InvoiceFailed(invoice_id=invoice.pk))
+
+    @staticmethod
+    @transaction.atomic
+    def reissue_for_retry(invoice: Invoice) -> None:
+        # move a failed invoice back to ISSUED and reemit the event so
+        # the normal payment flow charges it again 
+        # only FAILED invoices are reissued
+        if invoice.status != InvoiceStatus.FAILED:
+            return
+        invoice.transition_to(InvoiceStatus.ISSUED)
+        event_bus.publish(InvoiceIssued(invoice_id=invoice.pk))

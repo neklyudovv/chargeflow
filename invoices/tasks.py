@@ -2,6 +2,7 @@ from celery import shared_task
 from django.db import OperationalError
 
 from invoices.application.services import InvoiceService
+from invoices.domain.models import Invoice, InvoiceStatus
 from payments.domain.models import PaymentAttempt
 from subscriptions.domain.models import Subscription, SubscriptionStatus
 
@@ -28,3 +29,11 @@ def mark_invoice_paid(payment_attempt_id):
 def mark_invoice_failed(payment_attempt_id):
     payment = PaymentAttempt.objects.select_related("invoice").get(pk=payment_attempt_id)
     InvoiceService.mark_failed(payment.invoice)
+
+
+@shared_task(**RETRY)
+def run_dunning():
+    # Periodic dunning cycle: retry every failed invoice by reissuing it,
+    # which retriggers a payment attempt through the normal event flow. 
+    for invoice in Invoice.objects.filter(status=InvoiceStatus.FAILED):
+        InvoiceService.reissue_for_retry(invoice)
