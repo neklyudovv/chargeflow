@@ -26,6 +26,8 @@ def mark_subscription_active_for_invoice(invoice_id):
     # subscription has no other failed invoices left. Safe to retry.
     if subscription.status != SubscriptionStatus.OVERDUE:
         return
-    if subscription.invoices.filter(status=InvoiceStatus.FAILED).exists():
+    if subscription.invoices.filter(
+        status__in=[InvoiceStatus.FAILED, InvoiceStatus.OVERDUE]
+    ).exists():
         return
     subscription.transition_to(SubscriptionStatus.ACTIVE)

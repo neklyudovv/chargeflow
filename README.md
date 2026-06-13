@@ -75,7 +75,7 @@ Key flows:
 
 Event handlers are dispatched as **Celery tasks** rather than run inline, so slow work is decoupled from the request and survives a crash. Tasks retry transient errors with backoff, and every handler is **idempotent** - a unique-per-period constraint on invoices, state guards on settlement, and a no-duplicate guard on payment attempts, so a retry or a re-delivered event never double-issues or double-charges.
 
-A **Celery beat** schedule runs a **dunning** cycle that re-issues failed invoices and re-triggers their payment - the engine's automatic retry loop for failed billing.
+A **Celery beat** schedule runs a **dunning** cycle that re-issues failed invoices and re-triggers their payment, up to a bounded retry cap - the engine's automatic retry loop for failed billing.
 
 Redis is the broker, `celery_worker` executes tasks, and `celery_beat` schedules them. With no broker configured (local dev, CI), tasks run in-process, so neither Redis nor a worker is needed to run or test the project.
 

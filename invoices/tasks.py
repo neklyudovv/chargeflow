@@ -3,12 +3,14 @@ from django.db import OperationalError
 
 from invoices.application.services import InvoiceService
 from invoices.domain.models import Invoice, InvoiceStatus
-from payments.domain.models import PaymentAttempt
+from payments.domain.models import PaymentAttempt, PaymentStatus
 from subscriptions.domain.models import Subscription, SubscriptionStatus
 
 # db errors retry with backoff
 # logic errors are not listed here, so they surface instead of looping forever
 RETRY = {"autoretry_for": (OperationalError,), "max_retries": 5, "retry_backoff": True}
+
+MAX_DUNNING_ATTEMPTS = 3
 
 
 @shared_task(**RETRY)
@@ -36,4 +38,9 @@ def run_dunning():
     # Periodic dunning cycle: retry every failed invoice by reissuing it,
     # which retriggers a payment attempt through the normal event flow. 
     for invoice in Invoice.objects.filter(status=InvoiceStatus.FAILED):
+        failed_charges = invoice.payment_attempts.filter(
+            status=PaymentStatus.FAILED
+        ).count()
+        if failed_charges >= MAX_DUNNING_ATTEMPTS:
+            continue  # dunning exhausted — stop charging this invoice
         InvoiceService.reissue_for_retry(invoice)
