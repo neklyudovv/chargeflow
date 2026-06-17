@@ -37,7 +37,11 @@ def mark_invoice_failed(payment_attempt_id):
 def run_dunning():
     # Periodic dunning cycle: retry every failed invoice by reissuing it,
     # which retriggers a payment attempt through the normal event flow. 
-    for invoice in Invoice.objects.filter(status=InvoiceStatus.FAILED):
+    failed_ids = list(
+        Invoice.objects.filter(status=InvoiceStatus.FAILED).values_list("pk", flat=True)
+    )
+    for invoice_id in failed_ids:
+        invoice = Invoice.objects.get(pk=invoice_id)
         failed_charges = invoice.payment_attempts.filter(
             status=PaymentStatus.FAILED
         ).count()
