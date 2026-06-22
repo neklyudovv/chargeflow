@@ -11,6 +11,7 @@ from subscriptions.domain.events import (
     SubscriptionActivated,
     SubscriptionCanceled,
     SubscriptionCreated,
+    SubscriptionOverdue,
     SubscriptionRenewed,
 )
 from subscriptions.domain.models import Subscription, SubscriptionStatus
@@ -71,6 +72,14 @@ class SubscriptionService:
         subscription.save(update_fields=["current_period_start", "current_period_end", "updated_at"])
 
         event_bus.publish(SubscriptionActivated(subscription_id=subscription.pk))
+
+    @staticmethod
+    @transaction.atomic
+    def mark_overdue(subscription: Subscription) -> None:
+        if subscription.status != SubscriptionStatus.ACTIVE:
+            return
+        subscription.transition_to(SubscriptionStatus.OVERDUE)
+        event_bus.publish(SubscriptionOverdue(subscription_id=subscription.pk))
 
     @staticmethod
     @transaction.atomic
