@@ -14,7 +14,11 @@ from subscriptions.domain.events import (
     SubscriptionOverdue,
     SubscriptionRenewed,
 )
-from subscriptions.domain.models import Subscription, SubscriptionStatus
+from subscriptions.domain.models import (
+    CancellationReason,
+    Subscription,
+    SubscriptionStatus,
+)
 
 
 class SubscriptionService:
@@ -83,8 +87,13 @@ class SubscriptionService:
 
     @staticmethod
     @transaction.atomic
-    def cancel(subscription: Subscription) -> None:
+    def cancel(
+        subscription: Subscription,
+        reason: str = CancellationReason.VOLUNTARY,
+    ) -> None:
         subscription.transition_to(SubscriptionStatus.CANCELED)
+        subscription.canceled_reason = reason
+        subscription.save(update_fields=["canceled_reason", "updated_at"])
         event_bus.publish(SubscriptionCanceled(subscription_id=subscription.pk))
 
     @staticmethod

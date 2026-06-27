@@ -1,7 +1,9 @@
 import pytest
 
+from subscriptions.application.services import SubscriptionService
 from subscriptions.domain.models import (
     SUBSCRIPTION_TRANSITIONS,
+    CancellationReason,
     InvalidStatusTransition,
     SubscriptionStatus,
 )
@@ -65,6 +67,21 @@ def test_canceled_is_terminal(subscription):
     for dst in ALL_STATUSES - {SubscriptionStatus.CANCELED}:
         with pytest.raises(InvalidStatusTransition):
             subscription.transition_to(dst)
+
+
+def test_cancel_defaults_to_voluntary_reason(subscription):
+    SubscriptionService.cancel(subscription)
+
+    subscription.refresh_from_db()
+    assert subscription.status == SubscriptionStatus.CANCELED
+    assert subscription.canceled_reason == CancellationReason.VOLUNTARY
+
+
+def test_cancel_records_non_payment_reason(subscription):
+    SubscriptionService.cancel(subscription, reason=CancellationReason.NON_PAYMENT)
+
+    subscription.refresh_from_db()
+    assert subscription.canceled_reason == CancellationReason.NON_PAYMENT
 
 
 def test_overdue_can_recover_to_active(subscription):

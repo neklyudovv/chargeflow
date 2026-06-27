@@ -12,6 +12,11 @@ class SubscriptionStatus(models.TextChoices):
     CANCELED = "canceled", "Canceled"
 
 
+class CancellationReason(models.TextChoices):
+    VOLUNTARY = "voluntary", "Voluntary"
+    NON_PAYMENT = "non_payment", "Non-payment"
+
+
 SUBSCRIPTION_TRANSITIONS: dict[str, set[str]] = {
     SubscriptionStatus.TRIAL: {SubscriptionStatus.ACTIVE, SubscriptionStatus.CANCELED},
     SubscriptionStatus.ACTIVE: {SubscriptionStatus.OVERDUE, SubscriptionStatus.CANCELED},
@@ -39,6 +44,9 @@ class Subscription(models.Model):
     current_period_start = models.DateTimeField()
     current_period_end = models.DateTimeField()
     canceled_at = models.DateTimeField(null=True, blank=True)
+    canceled_reason = models.CharField(
+        max_length=20, choices=CancellationReason.choices, null=True, blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
