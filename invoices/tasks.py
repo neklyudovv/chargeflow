@@ -34,6 +34,12 @@ def mark_invoice_failed(payment_attempt_id):
 
 
 @shared_task(**RETRY)
+def cancel_open_invoices_for_subscription(subscription_id):
+    subscription = Subscription.objects.get(pk=subscription_id)
+    InvoiceService.cancel_open_for_subscription(subscription)
+
+
+@shared_task(**RETRY)
 def run_dunning():
     # Periodic dunning cycle: retry every failed invoice by reissuing it,
     # which retriggers a payment attempt through the normal event flow. 
@@ -46,5 +52,5 @@ def run_dunning():
             status=PaymentStatus.FAILED
         ).count()
         if failed_charges >= MAX_DUNNING_ATTEMPTS:
-            continue  # dunning exhausted — stop charging this invoice
+            continue  # dunning exhausted - stop charging this invoice
         InvoiceService.reissue_for_retry(invoice)

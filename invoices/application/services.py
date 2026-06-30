@@ -51,6 +51,21 @@ class InvoiceService:
 
     @staticmethod
     @transaction.atomic
+    def cancel_open_for_subscription(subscription) -> None:
+        # when a subscription is canceled, stop pursuing its still open invoices
+        # so dunning no longer retries them.
+        open_invoices = subscription.invoices.filter(
+            status__in=[
+                InvoiceStatus.DRAFT,
+                InvoiceStatus.ISSUED,
+                InvoiceStatus.FAILED,
+            ]
+        )
+        for invoice in open_invoices:
+            invoice.transition_to(InvoiceStatus.CANCELED)
+
+    @staticmethod
+    @transaction.atomic
     def reissue_for_retry(invoice: Invoice) -> None:
         # move a failed invoice back to ISSUED and reemit the event so
         # the normal payment flow charges it again 

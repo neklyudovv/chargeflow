@@ -10,6 +10,7 @@ class InvoicesConfig(AppConfig):
         from payments.domain.events import PaymentFailed, PaymentSucceeded
         from subscriptions.domain.events import (
             SubscriptionActivated,
+            SubscriptionCanceled,
             SubscriptionCreated,
             SubscriptionRenewed,
         )
@@ -35,4 +36,8 @@ class InvoicesConfig(AppConfig):
         event_bus.subscribe(
             PaymentFailed,
             lambda e: tasks.mark_invoice_failed.delay(e.payment_attempt_id),
+        )
+        event_bus.subscribe(
+            SubscriptionCanceled,
+            lambda e: tasks.cancel_open_invoices_for_subscription.delay(e.subscription_id),
         )
