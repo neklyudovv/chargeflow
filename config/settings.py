@@ -218,6 +218,15 @@ CELERY_BEAT_SCHEDULE = {
         "task": "invoices.tasks.run_dunning",
         "schedule": crontab(minute=0),
     },
+    # Staggered off dunning so the cycles don't pile onto the same minute.
+    "run-renewals-hourly": {
+        "task": "subscriptions.tasks.run_renewals",
+        "schedule": crontab(minute=15),
+    },
+    "run-trial-activations-hourly": {
+        "task": "subscriptions.tasks.run_trial_activations",
+        "schedule": crontab(minute=30),
+    },
 }
 
 # Mock payment provider: share of charges that are randomly declined (0.0-1.0).
