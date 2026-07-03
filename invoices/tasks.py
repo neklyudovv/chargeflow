@@ -52,5 +52,8 @@ def run_dunning():
             status=PaymentStatus.FAILED
         ).count()
         if failed_charges >= MAX_DUNNING_ATTEMPTS:
-            continue  # dunning exhausted - stop charging this invoice
+            # dunning exhausted - give up on this invoice and let the
+            # subscription be closed for non-payment
+            InvoiceService.mark_overdue(invoice)
+            continue
         InvoiceService.reissue_for_retry(invoice)

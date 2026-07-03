@@ -24,7 +24,7 @@ PAYABLE_INVOICE_STATUSES: set[str] = {
 INVOICE_TRANSITIONS: dict[str, set[str]] = {
     InvoiceStatus.DRAFT: {InvoiceStatus.ISSUED, InvoiceStatus.CANCELED},
     InvoiceStatus.ISSUED: {InvoiceStatus.PAID, InvoiceStatus.FAILED, InvoiceStatus.OVERDUE, InvoiceStatus.CANCELED},
-    InvoiceStatus.FAILED: {InvoiceStatus.ISSUED, InvoiceStatus.CANCELED},
+    InvoiceStatus.FAILED: {InvoiceStatus.ISSUED, InvoiceStatus.OVERDUE, InvoiceStatus.CANCELED},
     InvoiceStatus.OVERDUE: {InvoiceStatus.PAID, InvoiceStatus.CANCELED},
     InvoiceStatus.PAID: set(),
     InvoiceStatus.CANCELED: set(),

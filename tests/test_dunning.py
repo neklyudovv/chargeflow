@@ -54,9 +54,9 @@ def test_dunning_reactivates_overdue_subscription(
     assert subscription.status == SubscriptionStatus.ACTIVE
 
 
-def test_dunning_stops_after_retry_cap(invoice, django_capture_on_commit_callbacks):
-    # An invoice that already failed the maximum number of charges is left alone,
-    # so dunning stops hammering the provider.
+def test_dunning_gives_up_after_retry_cap(invoice, django_capture_on_commit_callbacks):
+    # An invoice that already failed the maximum number of charges is given up on:
+    # it moves to the terminal OVERDUE state and is not charged again.
     _force_status(invoice, InvoiceStatus.FAILED)
     for _ in range(MAX_DUNNING_ATTEMPTS):
         PaymentAttempt.objects.create(
@@ -67,7 +67,8 @@ def test_dunning_stops_after_retry_cap(invoice, django_capture_on_commit_callbac
         run_dunning()
 
     invoice.refresh_from_db()
-    assert invoice.status == InvoiceStatus.FAILED
+    assert invoice.status == InvoiceStatus.OVERDUE
+    # no new charge was attempted beyond the ones that exhausted the cap
     assert PaymentAttempt.objects.filter(invoice=invoice).count() == MAX_DUNNING_ATTEMPTS
 
 

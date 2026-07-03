@@ -1,7 +1,12 @@
 from django.db import transaction
 
 from infrastructure.events import event_bus
-from invoices.domain.events import InvoiceFailed, InvoiceIssued, InvoicePaid
+from invoices.domain.events import (
+    InvoiceFailed,
+    InvoiceIssued,
+    InvoiceOverdue,
+    InvoicePaid,
+)
 from invoices.domain.models import Invoice, InvoiceLine, InvoiceStatus
 
 
@@ -63,6 +68,14 @@ class InvoiceService:
         )
         for invoice in open_invoices:
             invoice.transition_to(InvoiceStatus.CANCELED)
+
+    @staticmethod
+    @transaction.atomic
+    def mark_overdue(invoice: Invoice) -> None:
+        if invoice.status != InvoiceStatus.FAILED:
+            return
+        invoice.transition_to(InvoiceStatus.OVERDUE)
+        event_bus.publish(InvoiceOverdue(invoice_id=invoice.pk))
 
     @staticmethod
     @transaction.atomic
