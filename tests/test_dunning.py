@@ -5,7 +5,7 @@ from django.utils import timezone
 from invoices.domain.models import Invoice, InvoiceStatus
 from invoices.tasks import MAX_DUNNING_ATTEMPTS, run_dunning
 from payments.domain.models import PaymentAttempt, PaymentStatus
-from subscriptions.domain.models import SubscriptionStatus
+from subscriptions.domain.models import CancellationReason, SubscriptionStatus
 from subscriptions.tasks import mark_subscription_active_for_invoice
 
 
@@ -70,6 +70,28 @@ def test_dunning_gives_up_after_retry_cap(invoice, django_capture_on_commit_call
     assert invoice.status == InvoiceStatus.OVERDUE
     # no new charge was attempted beyond the ones that exhausted the cap
     assert PaymentAttempt.objects.filter(invoice=invoice).count() == MAX_DUNNING_ATTEMPTS
+
+
+def test_dunning_exhaustion_closes_subscription_for_non_payment(
+    subscription, invoice, django_capture_on_commit_callbacks
+):
+    # The full give-up path: dunning runs out of retries -> invoice goes OVERDUE
+    # -> the subscription is closed, recorded as a non-payment cancellation.
+    _force_status(subscription, SubscriptionStatus.OVERDUE)
+    _force_status(invoice, InvoiceStatus.FAILED)
+    for _ in range(MAX_DUNNING_ATTEMPTS):
+        PaymentAttempt.objects.create(
+            invoice=invoice, amount=invoice.total, status=PaymentStatus.FAILED
+        )
+
+    with django_capture_on_commit_callbacks(execute=True):
+        run_dunning()
+
+    invoice.refresh_from_db()
+    subscription.refresh_from_db()
+    assert invoice.status == InvoiceStatus.OVERDUE
+    assert subscription.status == SubscriptionStatus.CANCELED
+    assert subscription.canceled_reason == CancellationReason.NON_PAYMENT
 
 
 def test_reactivation_blocked_by_other_unpaid_invoice(subscription, invoice):
