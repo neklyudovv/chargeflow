@@ -14,6 +14,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "current_period_start",
             "current_period_end",
             "canceled_at",
+            "canceled_reason",
             "created_at",
             "updated_at",
         ]
@@ -23,6 +24,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "current_period_start",
             "current_period_end",
             "canceled_at",
+            "canceled_reason",
             "created_at",
             "updated_at",
         ]

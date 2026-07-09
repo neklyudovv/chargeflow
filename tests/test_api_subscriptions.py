@@ -58,6 +58,21 @@ def test_create_subscription_autogenerates_invoice(
     assert Invoice.objects.filter(subscription_id=response.data["id"]).exists()
 
 
+def test_cancel_endpoint_exposes_reason(auth_client, customer, plan):
+    created = auth_client.post(
+        SUBSCRIPTIONS_URL,
+        {"customer_id": customer.pk, "plan_id": plan.pk},
+        format="json",
+    )
+    subscription_id = created.data["id"]
+
+    response = auth_client.post(f"{SUBSCRIPTIONS_URL}{subscription_id}/cancel/")
+
+    assert response.status_code == 200
+    assert response.data["status"] == "canceled"
+    assert response.data["canceled_reason"] == "voluntary"
+
+
 def test_created_subscription_appears_in_list(auth_client, customer, plan):
     auth_client.post(
         SUBSCRIPTIONS_URL,
