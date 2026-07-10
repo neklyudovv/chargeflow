@@ -9,6 +9,7 @@ x-app: &app
     - POSTGRES_USER=${DB_USER}
     - POSTGRES_PASSWORD=${DB_PASS}
     - CELERY_BROKER_URL=redis://redis:6379/0
+    - PAYMENT_FAILURE_RATE=0.5
   depends_on:
     db:
       condition: service_healthy

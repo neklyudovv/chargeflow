@@ -1,3 +1,6 @@
+import random
+
+from django.conf import settings
 from django.db import transaction
 
 from infrastructure.events import event_bus
@@ -91,8 +94,9 @@ class PaymentService:
 
 
 class MockPaymentProvider:
-    """Mock provider for MVP. Always succeeds."""
+    """Mock provider for MVP. Declines a share of charges set by
+    settings.PAYMENT_FAILURE_RATE"""
 
     @staticmethod
     def charge(amount, currency) -> bool:
-        return True
+        return random.random() >= settings.PAYMENT_FAILURE_RATE
