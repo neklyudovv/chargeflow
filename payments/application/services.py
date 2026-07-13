@@ -78,16 +78,19 @@ class PaymentService:
             return
 
         status = payload.get("status")
-        if status == "success" and payment.status != PaymentStatus.SUCCESS:
-            payment.status = PaymentStatus.SUCCESS
-            payment.provider_response = payload
-            payment.save(update_fields=["status", "provider_response"])
-            event_bus.publish(PaymentSucceeded(payment_attempt_id=payment.pk))
-        elif status == "failed" and payment.status != PaymentStatus.FAILED:
-            payment.status = PaymentStatus.FAILED
-            payment.provider_response = payload
-            payment.save(update_fields=["status", "provider_response"])
-            event_bus.publish(PaymentFailed(payment_attempt_id=payment.pk))
+        # late or duplicate webhook must never flip it back to failed,
+        # nor reemit success. Only act while it hasnt succeeded yet.
+        if payment.status != PaymentStatus.SUCCESS:
+            if status == "success":
+                payment.status = PaymentStatus.SUCCESS
+                payment.provider_response = payload
+                payment.save(update_fields=["status", "provider_response"])
+                event_bus.publish(PaymentSucceeded(payment_attempt_id=payment.pk))
+            elif status == "failed" and payment.status != PaymentStatus.FAILED:
+                payment.status = PaymentStatus.FAILED
+                payment.provider_response = payload
+                payment.save(update_fields=["status", "provider_response"])
+                event_bus.publish(PaymentFailed(payment_attempt_id=payment.pk))
 
         webhook.processed = True
         webhook.save(update_fields=["processed"])
