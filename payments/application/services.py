@@ -17,6 +17,7 @@ class PaymentService:
     @staticmethod
     @transaction.atomic
     def attempt(invoice: Invoice) -> PaymentAttempt:
+        invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
         if invoice.status not in PAYABLE_INVOICE_STATUSES:
             raise InvoiceNotPayable(
                 f"Cannot attempt payment on invoice in status '{invoice.status}'"
@@ -71,7 +72,7 @@ class PaymentService:
             return
 
         try:
-            payment = PaymentAttempt.objects.get(pk=payment_id)
+            payment = PaymentAttempt.objects.select_for_update().get(pk=payment_id)
         except PaymentAttempt.DoesNotExist:
             webhook.processed = True
             webhook.save(update_fields=["processed"])
