@@ -16,7 +16,15 @@ class InvoiceNotPayable(Exception):
 class PaymentService:
     @staticmethod
     @transaction.atomic
-    def attempt(invoice: Invoice) -> PaymentAttempt:
+    def attempt(invoice: Invoice, idempotency_key: str | None = None) -> PaymentAttempt:
+        # a retry carrying the same idempotency key returns
+        # the original attempt instead of charging again
+        if idempotency_key:
+            replay = PaymentAttempt.objects.filter(
+                idempotency_key=idempotency_key
+            ).first()
+            if replay:
+                return replay
         invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
         if invoice.status not in PAYABLE_INVOICE_STATUSES:
             raise InvoiceNotPayable(
@@ -32,6 +40,7 @@ class PaymentService:
             invoice=invoice,
             amount=invoice.total,
             status=PaymentStatus.PENDING,
+            idempotency_key=idempotency_key,
         )
         success = MockPaymentProvider.charge(invoice.total, invoice.currency)
 

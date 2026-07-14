@@ -20,6 +20,9 @@ class PaymentAttempt(models.Model):
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     provider_response = models.JSONField(default=dict, blank=True)
+    idempotency_key = models.CharField(
+        max_length=255, null=True, blank=True, unique=True
+    )
     attempted_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

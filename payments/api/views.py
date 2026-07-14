@@ -49,7 +49,10 @@ class PaymentAttemptViewSet(
             subscription__customer__organization=org,
         )
         try:
-            payment = PaymentService.attempt(invoice)
+            payment = PaymentService.attempt(
+                invoice,
+                idempotency_key=request.headers.get("Idempotency-Key"),
+            )
         except InvoiceNotPayable as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(PaymentAttemptSerializer(payment).data, status=status.HTTP_201_CREATED)
