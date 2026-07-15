@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 import os
 from pathlib import Path
 
+from celery.schedules import crontab
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -196,5 +197,25 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
+    },
+}
+
+# Celery / background jobs
+# In production, docker-compose sets a separate worker/beat consume the queue.
+# Without a broker, tasks run inline
+# so local `runserver` and CI need no Redis and no worker process.
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "")
+CELERY_TASK_ALWAYS_EAGER = not CELERY_BROKER_URL
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TIMEZONE = "UTC"
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+CELERY_BEAT_SCHEDULE = {
+    "run-dunning-hourly": {
+        "task": "invoices.tasks.run_dunning",
+        "schedule": crontab(minute=0),
     },
 }

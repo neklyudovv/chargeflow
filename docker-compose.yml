@@ -1,3 +1,21 @@
+x-app: &app
+  build: .
+  env_file:
+    - .env
+  environment: &app-env
+    - POSTGRES_HOST=db
+    - POSTGRES_PORT=${DB_PORT}
+    - POSTGRES_DB=${DB_NAME}
+    - POSTGRES_USER=${DB_USER}
+    - POSTGRES_PASSWORD=${DB_PASS}
+    - CELERY_BROKER_URL=redis://redis:6379/0
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
 services:
   db:
     image: postgres:16-alpine
@@ -13,22 +31,31 @@ services:
       timeout: 5s
       retries: 5
 
-  web:
-    build: .
-    env_file:
-      - .env
-    environment:
-      - POSTGRES_HOST=db
-      - POSTGRES_PORT=${DB_PORT}
-      - POSTGRES_DB=${DB_NAME}
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASS}
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # backend owns migrations/collectstatic via the image entrypoint, then gunicorn
+  backend:
+    <<: *app
     ports:
       - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
+
+  # Worker/beat skips the migrate+collectstatic entrypoint and
+  # runs Celery directly, sharing same image and settings
+  celery_worker:
+    <<: *app
+    entrypoint: []
+    command: ["celery", "-A", "config", "worker", "--loglevel=info"]
+
+  celery_beat:
+    <<: *app
+    entrypoint: []
+    command: ["celery", "-A", "config", "beat", "--loglevel=info"]
 
 volumes:
   postgres_data:

@@ -51,6 +51,12 @@ class Invoice(models.Model):
 
     class Meta:
         app_label = "invoices"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["subscription", "period_start", "period_end"],
+                name="unique_invoice_per_subscription_period",
+            ),
+        ]
 
     def __str__(self):
         return f"Invoice #{self.pk} - {self.subscription.customer} ({self.status})"

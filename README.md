@@ -3,14 +3,16 @@
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Django](https://img.shields.io/badge/Django-6.0-092E20?logo=django&logoColor=white)
 ![DRF](https://img.shields.io/badge/DRF-3.16-A30000?logo=django&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-compose-2496ED?logo=docker&logoColor=white)
+![Celery](https://img.shields.io/badge/Celery-5.5-37814A?logo=celery&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)
 ![pytest](https://img.shields.io/badge/pytest-8.3-0A9EDC?logo=pytest&logoColor=white)
 
 ![CI](https://github.com/neklyudovv/chargeflow/actions/workflows/ci.yml/badge.svg)
 ![coverage](https://img.shields.io/badge/coverage-83%25-brightgreen)
 
-Chargeflow is a modular Django billing engine that manages the full subscription lifecycle - plans, subscriptions, invoices, and payments - driven by an in-process domain-event bus with transactional integrity.
+Chargeflow is a modular Django billing engine that manages the full subscription lifecycle - plans, subscriptions, invoices, and payments - driven by a domain-event bus with transactional integrity, whose handlers run as retriable Celery background tasks.
 
 ## Table of Contents
 
@@ -28,6 +30,7 @@ Chargeflow is a modular Django billing engine that manages the full subscription
 * **PostgreSQL** - database
 * **SQLite** - zero-config database for local development
 * **Docker** - containerized deployment via docker-compose
+* **Celery + Redis** - background task processing and scheduled billing runs (dunning)
 * **Github Actions** - CI
 * **drf-spectacular** - OpenAPI 3 schema and interactive Swagger / Redoc docs
 * **Pytest** (+ pytest-django, pytest-cov) - integration and unit testing
@@ -35,13 +38,14 @@ Chargeflow is a modular Django billing engine that manages the full subscription
 
 ## Solution Overview
 
-Chargeflow models a real billing engine as a **modular monolith** - no microservices, no external message broker, all state transitions committed atomically in a single database:
+Chargeflow models a real billing engine as a **modular monolith** - no microservices; domain apps coordinate through an in-process event bus, with events and scheduled work handed off to Celery background workers:
 
 * Define **plans** with pricing and billing intervals (day / week / month / year)
 * Manage the **subscription lifecycle** through an explicit state machine
 * **Invoices are generated automatically** in response to domain events, not by an endpoint
-* **Payments** are attempted synchronously and reconciled through idempotent webhooks
-* **Coordinated by an in-process event bus** - apps react to domain events instead of calling each other directly, and handlers only fire after the transaction commits
+* **Payments** are attempted by background workers and reconciled through idempotent webhooks
+* **Failed payments are retried automatically** by a scheduled Celery beat dunning job
+* **Coordinated by an event bus** - apps react to domain events instead of calling each other directly; handlers are dispatched as retriable, idempotent Celery tasks after the transaction commits
 * **Multi-tenant** by design - every request is scoped to an organization
 
 ## Architecture Highlights
@@ -58,40 +62,53 @@ The billing model is split across five Django apps.
 
 ### 2. Event Bus (`infrastructure/events.py`)
 
-The core of the design: an in-process, synchronous domain-event bus (`EventBus`). Instead of one app reaching into another, each publishes domain events and reacts to the ones it cares about. Events are dispatched via `transaction.on_commit()`, so handlers run **only after** the database transaction commits - never on a rolled-back state. Handlers are registered per app in `AppConfig.ready()`.
+The core of the design: a domain-event bus (`EventBus`) that keeps the apps decoupled. Instead of one app reaching into another, each publishes domain events and reacts to the ones it cares about. Events are dispatched via `transaction.on_commit()`, so handlers run **only after** the database transaction commits - never on a rolled-back state. Handlers are registered per app in `AppConfig.ready()`.
+
+The bus stays the router; each handler is executed as a **Celery task** (see below), so the event -> task boundary lives in the registration, not in the business code.
 
 Key flows:
 
 * `SubscriptionCreated` / `SubscriptionActivated` -> an `Invoice` is generated automatically
 * `PaymentSucceeded` -> invoice marked paid; `PaymentFailed` -> invoice failed -> subscription moves to `OVERDUE`
 
-### 3. Domain Layer (`domain/`)
+### 3. Background Jobs (Celery + Redis)
+
+Event handlers are dispatched as **Celery tasks** rather than run inline, so slow work is decoupled from the request and survives a crash. Tasks retry transient errors with backoff, and every handler is **idempotent** - a unique-per-period constraint on invoices, state guards on settlement, and a no-duplicate guard on payment attempts, so a retry or a re-delivered event never double-issues or double-charges.
+
+A **Celery beat** schedule runs a **dunning** cycle that re-issues failed invoices and re-triggers their payment, up to a bounded retry cap - the engine's automatic retry loop for failed billing.
+
+Redis is the broker, `celery_worker` executes tasks, and `celery_beat` schedules them. With no broker configured (local dev, CI), tasks run in-process, so neither Redis nor a worker is needed to run or test the project.
+
+### 4. Domain Layer (`domain/`)
 
 Entities, state-machine transition tables, and domain events. Illegal state changes are impossible by construction: every transition goes through `model.transition_to(new_state)`, which raises `InvalidStatusTransition` on an illegal move.
 
-### 4. Application Layer (`application/services.py`)
+### 5. Application Layer (`application/services.py`)
 
 Orchestration and use cases. Services wrap their work in `@transaction.atomic` and publish domain events - keeping the API layer thin and the business rules in one place.
 
-### 5. API Layer (`api/`)
+### 6. API Layer (`api/`)
 
 Built on **Django REST Framework**: ViewSets, serializers, and routing. This layer is a thin adapter between HTTP and the services, plus authentication and org resolution.
 
-### 6. State Machines
+### 7. State Machines
 
 * **Subscription:** `TRIAL -> ACTIVE -> OVERDUE -> CANCELED`
 * **Invoice:** `DRAFT -> ISSUED -> PAID | FAILED | OVERDUE | CANCELED` (with `FAILED -> ISSUED` retry)
 
-### 7. Multi-tenancy
+### 8. Multi-tenancy
 
 Every authenticated request resolves an organization (API key -> `X-Organization-Id` header -> implicit single org), and **all querysets are scoped to it**, so tenants can never read each other's data.
 
-### 8. Docker Environment
+### 9. Docker Environment
 
 `docker-compose` runs the following services:
 
-* Django application
-* PostgreSQL database
+* `backend` - Django application (gunicorn)
+* `db` - PostgreSQL
+* `redis` - Celery broker
+* `celery_worker` - background task worker
+* `celery_beat` - scheduler
 
 ## API Endpoints
 
@@ -174,8 +191,8 @@ The endpoints below are grouped by domain.
 
 ## TODO
 
-* [ ] Background jobs (Celery / Redis) for async billing runs
-* [ ] Dunning / retry logic for failed payments
+* [x] Background jobs (Celery / Redis) for async billing runs
+* [x] Dunning / retry logic for failed payments
 * [ ] Real payment provider integration (currently a mock provider)
 * [ ] Invoice PDF generation
 * [ ] Email notifications
