@@ -219,3 +219,7 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute=0),
     },
 }
+
+# Mock payment provider: share of charges that are randomly declined (0.0-1.0).
+# Defaults to 0 so local runs and tests are deterministic; docker sets 0.5
+PAYMENT_FAILURE_RATE = float(os.environ.get("PAYMENT_FAILURE_RATE", "0"))

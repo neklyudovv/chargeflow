@@ -1,3 +1,6 @@
+import random
+
+from django.conf import settings
 from django.db import transaction
 
 from infrastructure.events import event_bus
@@ -13,7 +16,16 @@ class InvoiceNotPayable(Exception):
 class PaymentService:
     @staticmethod
     @transaction.atomic
-    def attempt(invoice: Invoice) -> PaymentAttempt:
+    def attempt(invoice: Invoice, idempotency_key: str | None = None) -> PaymentAttempt:
+        # a retry carrying the same idempotency key returns
+        # the original attempt instead of charging again
+        if idempotency_key:
+            replay = PaymentAttempt.objects.filter(
+                idempotency_key=idempotency_key
+            ).first()
+            if replay:
+                return replay
+        invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
         if invoice.status not in PAYABLE_INVOICE_STATUSES:
             raise InvoiceNotPayable(
                 f"Cannot attempt payment on invoice in status '{invoice.status}'"
@@ -28,6 +40,7 @@ class PaymentService:
             invoice=invoice,
             amount=invoice.total,
             status=PaymentStatus.PENDING,
+            idempotency_key=idempotency_key,
         )
         success = MockPaymentProvider.charge(invoice.total, invoice.currency)
 
@@ -68,31 +81,35 @@ class PaymentService:
             return
 
         try:
-            payment = PaymentAttempt.objects.get(pk=payment_id)
+            payment = PaymentAttempt.objects.select_for_update().get(pk=payment_id)
         except PaymentAttempt.DoesNotExist:
             webhook.processed = True
             webhook.save(update_fields=["processed"])
             return
 
         status = payload.get("status")
-        if status == "success" and payment.status != PaymentStatus.SUCCESS:
-            payment.status = PaymentStatus.SUCCESS
-            payment.provider_response = payload
-            payment.save(update_fields=["status", "provider_response"])
-            event_bus.publish(PaymentSucceeded(payment_attempt_id=payment.pk))
-        elif status == "failed" and payment.status != PaymentStatus.FAILED:
-            payment.status = PaymentStatus.FAILED
-            payment.provider_response = payload
-            payment.save(update_fields=["status", "provider_response"])
-            event_bus.publish(PaymentFailed(payment_attempt_id=payment.pk))
+        # late or duplicate webhook must never flip it back to failed,
+        # nor reemit success. Only act while it hasnt succeeded yet.
+        if payment.status != PaymentStatus.SUCCESS:
+            if status == "success":
+                payment.status = PaymentStatus.SUCCESS
+                payment.provider_response = payload
+                payment.save(update_fields=["status", "provider_response"])
+                event_bus.publish(PaymentSucceeded(payment_attempt_id=payment.pk))
+            elif status == "failed" and payment.status != PaymentStatus.FAILED:
+                payment.status = PaymentStatus.FAILED
+                payment.provider_response = payload
+                payment.save(update_fields=["status", "provider_response"])
+                event_bus.publish(PaymentFailed(payment_attempt_id=payment.pk))
 
         webhook.processed = True
         webhook.save(update_fields=["processed"])
 
 
 class MockPaymentProvider:
-    """Mock provider for MVP. Always succeeds."""
+    """Mock provider for MVP. Declines a share of charges set by
+    settings.PAYMENT_FAILURE_RATE"""
 
     @staticmethod
     def charge(amount, currency) -> bool:
-        return True
+        return random.random() >= settings.PAYMENT_FAILURE_RATE
