@@ -67,8 +67,27 @@ class SubscriptionService:
         return subscription
 
     @staticmethod
+    def is_due_for_renewal(subscription: Subscription) -> bool:
+        return (
+            subscription.status == SubscriptionStatus.ACTIVE
+            and subscription.current_period_end <= timezone.now()
+        )
+
+    @staticmethod
+    def is_trial_to_activate(subscription: Subscription) -> bool:
+        return subscription.status == SubscriptionStatus.TRIAL
+
+    @staticmethod
     @transaction.atomic
     def activate(subscription: Subscription) -> None:
+        # Ends a trial, and only a trial: activation resets the billing period,
+        # so letting it run on an OVERDUE subscription would wipe the unpaid
+        # period and clear the arrears without anyone paying them. An OVERDUE
+        # subscription goes back to ACTIVE only by paying off its invoices.
+        subscription = Subscription.objects.select_for_update().select_related("plan").get(pk=subscription.pk)
+        if not SubscriptionService.is_trial_to_activate(subscription):
+            raise ValueError(f"Cannot activate subscription with status '{subscription.status}'")
+
         subscription.transition_to(SubscriptionStatus.ACTIVE)
         now = timezone.now()
         subscription.current_period_start = now
@@ -99,8 +118,15 @@ class SubscriptionService:
     @staticmethod
     @transaction.atomic
     def renew(subscription: Subscription) -> None:
+        # Locked and rechecked here rather than in the caller: renewing twice
+        # bills the customer for a period they already have, and the unique
+        # constraint on the invoice period does not catch it because the second
+        # renewal moves the period forward.
+        subscription = Subscription.objects.select_for_update().select_related("plan").get(pk=subscription.pk)
         if subscription.status != SubscriptionStatus.ACTIVE:
             raise ValueError(f"Cannot renew subscription with status '{subscription.status}'")
+        if not SubscriptionService.is_due_for_renewal(subscription):
+            raise ValueError("Cannot renew a subscription before its period has ended")
 
         now = timezone.now()
         subscription.current_period_start = now

@@ -1,3 +1,4 @@
+from django.db.models import ProtectedError
 from rest_framework import viewsets
 from rest_framework.exceptions import ValidationError
 
@@ -33,5 +34,12 @@ class PlanViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         plan_id = instance.pk
-        instance.delete()
+        try:
+            instance.delete()
+        except ProtectedError:
+            # subscriptions FK is PROTECT - a plan with subscriptions cannot be
+            # deleted. Archive it instead of hard-deleting.
+            raise ValidationError(
+                {"detail": "Cannot delete a plan that has subscriptions; archive it instead."}
+            )
         event_bus.publish(PlanDeleted(plan_id=plan_id))

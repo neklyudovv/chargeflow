@@ -191,6 +191,14 @@ LOGGING = {
             "style": "{",
         },
     },
+    # Root handler so every app logger (invoices.tasks, subscriptions.tasks, …)
+    # reaches the console. Under Celery the worker attaches its own root handler,
+    # but runserver / eager mode has none, so batch logger.exception() calls
+    # would otherwise vanish.
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
     "loggers": {
         "infrastructure": {
             "handlers": ["console"],

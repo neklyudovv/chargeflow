@@ -1,6 +1,7 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from accounts.models import Customer
@@ -8,7 +9,16 @@ from accounts.request_context import get_request_organization
 from plans.models import Plan
 from subscriptions.api.serializers import SubscriptionCreateSerializer, SubscriptionSerializer
 from subscriptions.application.services import SubscriptionService
-from subscriptions.domain.models import Subscription
+from subscriptions.domain.models import InvalidStatusTransition, Subscription
+
+
+def _apply(service_call, subscription):
+    # The services own the lifecycle rules; a rejected transition is the caller
+    # asking for something illegal, not a server fault.
+    try:
+        service_call(subscription)
+    except (ValueError, InvalidStatusTransition) as exc:
+        raise ValidationError({"detail": str(exc)})
 
 
 class SubscriptionViewSet(
@@ -46,26 +56,30 @@ class SubscriptionViewSet(
             pk=serializer.validated_data["plan_id"],
             organization=org,
         )
-        subscription = SubscriptionService.create(customer, plan)
+        try:
+            subscription = SubscriptionService.create(customer, plan)
+        except ValueError as exc:
+            # e.g. subscribing to an archived plan - a bad request, not a fault
+            raise ValidationError({"detail": str(exc)})
         return Response(SubscriptionSerializer(subscription).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"])
     def activate(self, request, pk=None):
         subscription = self.get_object()
-        SubscriptionService.activate(subscription)
+        _apply(SubscriptionService.activate, subscription)
         subscription.refresh_from_db()
         return Response(SubscriptionSerializer(subscription).data)
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
         subscription = self.get_object()
-        SubscriptionService.cancel(subscription)
+        _apply(SubscriptionService.cancel, subscription)
         subscription.refresh_from_db()
         return Response(SubscriptionSerializer(subscription).data)
 
     @action(detail=True, methods=["post"])
     def renew(self, request, pk=None):
         subscription = self.get_object()
-        SubscriptionService.renew(subscription)
+        _apply(SubscriptionService.renew, subscription)
         subscription.refresh_from_db()
         return Response(SubscriptionSerializer(subscription).data)

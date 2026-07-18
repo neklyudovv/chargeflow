@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.utils import timezone
 
 from invoices.domain.models import Invoice
+from subscriptions.application.services import SubscriptionService
 from subscriptions.domain.models import SubscriptionStatus
 from subscriptions.tasks import run_renewals, run_trial_activations
 
@@ -72,6 +73,36 @@ def test_running_trial_is_left_alone(subscription):
     subscription.refresh_from_db()
     assert subscription.status == SubscriptionStatus.TRIAL
     assert not Invoice.objects.filter(subscription=subscription).exists()
+
+
+def test_one_bad_subscription_does_not_hold_up_the_batch(
+    subscription, customer, plan, django_capture_on_commit_callbacks, monkeypatch
+):
+    from subscriptions.domain.models import Subscription
+
+    _set(subscription, SubscriptionStatus.ACTIVE, timezone.now() - timedelta(hours=1))
+    healthy = Subscription.objects.create(
+        customer=customer,
+        plan=plan,
+        status=SubscriptionStatus.ACTIVE,
+        current_period_start=timezone.now() - timedelta(days=31),
+        current_period_end=timezone.now() - timedelta(hours=1),
+    )
+
+    real_renew = SubscriptionService.renew
+
+    def boom(sub):
+        if sub.pk == subscription.pk:
+            raise RuntimeError("provider exploded")
+        return real_renew(sub)
+
+    monkeypatch.setattr(SubscriptionService, "renew", staticmethod(boom))
+
+    with django_capture_on_commit_callbacks(execute=True):
+        run_renewals()  # must not raise
+
+    healthy.refresh_from_db()
+    assert healthy.current_period_end > timezone.now()
 
 
 def test_renewals_are_idempotent_within_a_cycle(
