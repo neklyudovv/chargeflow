@@ -160,7 +160,36 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Throttling is backed by the shared cache (see CACHES), so counters are
+    # enforced across gunicorn workers and instances. The default class covers
+    # every route by tenant; auth endpoints override it with a per-IP scope.
+    "DEFAULT_THROTTLE_CLASSES": [
+        "accounts.throttling.OrganizationRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "org": os.environ.get("THROTTLE_RATE_ORG", "100/min"),
+        "auth_register": os.environ.get("THROTTLE_RATE_REGISTER", "5/min"),
+        "auth_login": os.environ.get("THROTTLE_RATE_LOGIN", "5/min"),
+    },
 }
+
+# Throttle counters live here. A shared Redis cache makes the limits fleet-wide;
+# without REDIS_THROTTLE_URL (local runserver / CI) we fall back to per-process
+# memory, which still works for a single instance.
+REDIS_THROTTLE_URL = os.environ.get("REDIS_THROTTLE_URL", "")
+if REDIS_THROTTLE_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_THROTTLE_URL,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        }
+    }
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Chargeflow API",

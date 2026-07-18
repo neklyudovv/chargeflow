@@ -1,7 +1,18 @@
 from datetime import timedelta
 
 import pytest
+from django.core.cache import cache
 from django.utils import timezone
+
+
+@pytest.fixture(autouse=True)
+def _clear_throttle_cache():
+    # Throttle counters live in the cache, which is shared
+    # for the whole process. Clear it around each test so limits dont leak
+    # across tests and flake the suite
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.fixture

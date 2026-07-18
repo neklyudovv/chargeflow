@@ -36,6 +36,7 @@ from accounts.events import (
 from accounts.models import ApiKey, Customer, Invitation, Organization, OrganizationMembership, User
 from accounts.permissions import IsOrgAdmin
 from accounts.request_context import get_request_organization
+from accounts.throttling import AuthRateThrottle
 from infrastructure.events import event_bus
 
 
@@ -46,6 +47,8 @@ class RegisterView(APIView):
     """
     authentication_classes: list[type[BaseAuthentication]] = []
     permission_classes = [AllowAny]
+    throttle_classes = [AuthRateThrottle]
+    throttle_scope = "auth_register"
 
     @extend_schema(
         request=RegisterSerializer,
@@ -83,6 +86,8 @@ class LoginView(APIView):
     """
     authentication_classes: list[type[BaseAuthentication]] = []
     permission_classes = [AllowAny]
+    throttle_classes = [AuthRateThrottle]
+    throttle_scope = "auth_login"
 
     @extend_schema(
         request=LoginSerializer,
