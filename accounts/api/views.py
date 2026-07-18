@@ -285,7 +285,9 @@ class InvitationViewSet(
         email = serializer.validated_data["email"]
         role = serializer.validated_data["role"]
 
-        if OrganizationMembership.objects.filter(organization=org, user__email=email).exists():
+        if OrganizationMembership.objects.filter(
+            organization=org, user__email__iexact=email
+        ).exists():
             raise ValidationError({"email": "This user is already a member of this organization."})
 
         invitation = Invitation.create_for_organization(org, email, role)
@@ -323,7 +325,7 @@ class AcceptInvitationView(APIView):
             raise ValidationError({"token": "This invitation has already been accepted."})
         if invitation.is_expired:
             raise ValidationError({"token": "This invitation has expired."})
-        if invitation.email != request.user.email:
+        if invitation.email.lower() != request.user.email.lower():
             raise ValidationError({"token": "This invitation was sent to a different email address."})
         if OrganizationMembership.objects.filter(
             organization=invitation.organization, user=request.user
