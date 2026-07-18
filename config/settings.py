@@ -171,6 +171,13 @@ REST_FRAMEWORK = {
         "auth_register": os.environ.get("THROTTLE_RATE_REGISTER", "5/min"),
         "auth_login": os.environ.get("THROTTLE_RATE_LOGIN", "5/min"),
     },
+    # How many trusted proxies sit in front of the app. Left unset, DRF derives
+    # the throttle IP straight from the client-supplied X-Forwarded-For header,
+    # so a spoofed header lands each request in a fresh bucket and defeats the
+    # per-IP auth throttle. Default 0 (gunicorn is exposed directly) makes DRF
+    # trust only REMOTE_ADDR; behind N trusted proxies set DRF_NUM_PROXIES=N so
+    # it reads the (N+1)th-from-last XFF entry instead.
+    "NUM_PROXIES": int(os.environ.get("DRF_NUM_PROXIES", "0")),
 }
 
 # Throttle counters live here. A shared Redis cache makes the limits fleet-wide;

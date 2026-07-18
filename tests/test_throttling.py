@@ -61,6 +61,22 @@ def test_login_is_throttled_by_ip(db):
     assert statuses.count(429) == 1
 
 
+def test_spoofed_forwarded_for_does_not_escape_login_throttle(db):
+    # NUM_PROXIES=0 -> the throttle keys on REMOTE_ADDR, so a client rotating
+    # X-Forwarded-For can't land each attempt in a fresh bucket
+    client = APIClient()
+    payload = {"email": "nobody@example.com", "password": "wrong"}
+
+    statuses = [
+        client.post(
+            LOGIN_URL, payload, format="json", HTTP_X_FORWARDED_FOR=f"9.9.9.{i}"
+        ).status_code
+        for i in range(6)
+    ]
+
+    assert statuses[-1] == 429
+
+
 def test_429_carries_retry_after(db):
     client = APIClient()
     payload = {"email": "nobody@example.com", "password": "wrong"}
