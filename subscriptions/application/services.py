@@ -5,7 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.models import Customer
-from infrastructure.events import event_bus
+from infrastructure.events import event_dispatcher
 from plans.models import Plan, PlanStatus
 from subscriptions.domain.events import (
     SubscriptionActivated,
@@ -63,7 +63,7 @@ class SubscriptionService:
             ),
         )
 
-        event_bus.publish(SubscriptionCreated(subscription_id=subscription.pk))
+        event_dispatcher.publish(SubscriptionCreated(subscription_id=subscription.pk))
         return subscription
 
     @staticmethod
@@ -94,7 +94,7 @@ class SubscriptionService:
         subscription.current_period_end = SubscriptionService._compute_period_end(now, subscription.plan)
         subscription.save(update_fields=["current_period_start", "current_period_end", "updated_at"])
 
-        event_bus.publish(SubscriptionActivated(subscription_id=subscription.pk))
+        event_dispatcher.publish(SubscriptionActivated(subscription_id=subscription.pk))
 
     @staticmethod
     @transaction.atomic
@@ -102,7 +102,7 @@ class SubscriptionService:
         if subscription.status != SubscriptionStatus.ACTIVE:
             return
         subscription.transition_to(SubscriptionStatus.OVERDUE)
-        event_bus.publish(SubscriptionOverdue(subscription_id=subscription.pk))
+        event_dispatcher.publish(SubscriptionOverdue(subscription_id=subscription.pk))
 
     @staticmethod
     @transaction.atomic
@@ -113,7 +113,7 @@ class SubscriptionService:
         subscription.transition_to(SubscriptionStatus.CANCELED)
         subscription.canceled_reason = reason
         subscription.save(update_fields=["canceled_reason", "updated_at"])
-        event_bus.publish(SubscriptionCanceled(subscription_id=subscription.pk))
+        event_dispatcher.publish(SubscriptionCanceled(subscription_id=subscription.pk))
 
     @staticmethod
     @transaction.atomic
@@ -133,4 +133,4 @@ class SubscriptionService:
         subscription.current_period_end = SubscriptionService._compute_period_end(now, subscription.plan)
         subscription.save(update_fields=["current_period_start", "current_period_end", "updated_at"])
 
-        event_bus.publish(SubscriptionRenewed(subscription_id=subscription.pk))
+        event_dispatcher.publish(SubscriptionRenewed(subscription_id=subscription.pk))

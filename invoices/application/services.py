@@ -1,6 +1,6 @@
 from django.db import transaction
 
-from infrastructure.events import event_bus
+from infrastructure.events import event_dispatcher
 from invoices.domain.events import (
     InvoiceFailed,
     InvoiceIssued,
@@ -35,7 +35,7 @@ class InvoiceService:
             amount=subscription.plan.price,
         )
         invoice.transition_to(InvoiceStatus.ISSUED)
-        event_bus.publish(InvoiceIssued(invoice_id=invoice.pk))
+        event_dispatcher.publish(InvoiceIssued(invoice_id=invoice.pk))
         return invoice
 
     @staticmethod
@@ -44,7 +44,7 @@ class InvoiceService:
         if invoice.status == InvoiceStatus.PAID:
             return
         invoice.transition_to(InvoiceStatus.PAID)
-        event_bus.publish(InvoicePaid(invoice_id=invoice.pk))
+        event_dispatcher.publish(InvoicePaid(invoice_id=invoice.pk))
 
     @staticmethod
     @transaction.atomic
@@ -54,7 +54,7 @@ class InvoiceService:
         if invoice.status != InvoiceStatus.ISSUED:
             return
         invoice.transition_to(InvoiceStatus.FAILED)
-        event_bus.publish(InvoiceFailed(invoice_id=invoice.pk))
+        event_dispatcher.publish(InvoiceFailed(invoice_id=invoice.pk))
 
     @staticmethod
     @transaction.atomic
@@ -77,7 +77,7 @@ class InvoiceService:
         if invoice.status != InvoiceStatus.FAILED:
             return
         invoice.transition_to(InvoiceStatus.OVERDUE)
-        event_bus.publish(InvoiceOverdue(invoice_id=invoice.pk))
+        event_dispatcher.publish(InvoiceOverdue(invoice_id=invoice.pk))
 
     @staticmethod
     @transaction.atomic
@@ -88,4 +88,4 @@ class InvoiceService:
         if invoice.status != InvoiceStatus.FAILED:
             return
         invoice.transition_to(InvoiceStatus.ISSUED)
-        event_bus.publish(InvoiceIssued(invoice_id=invoice.pk))
+        event_dispatcher.publish(InvoiceIssued(invoice_id=invoice.pk))

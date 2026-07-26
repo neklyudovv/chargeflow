@@ -37,7 +37,7 @@ from accounts.models import ApiKey, Customer, Invitation, Organization, Organiza
 from accounts.permissions import IsOrgAdmin
 from accounts.request_context import get_request_organization
 from accounts.throttling import AuthRateThrottle
-from infrastructure.events import event_bus
+from infrastructure.events import event_dispatcher
 
 
 class RegisterView(APIView):
@@ -161,8 +161,8 @@ class OrganizationViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewse
             role=OrganizationMembership.Role.OWNER,
         )
         api_key_instance, raw_key = ApiKey.create_for_organization(organization, name="Default")
-        event_bus.publish(OrganizationCreated(organization_id=organization.pk))
-        event_bus.publish(ApiKeyCreated(api_key_id=api_key_instance.pk))
+        event_dispatcher.publish(OrganizationCreated(organization_id=organization.pk))
+        event_dispatcher.publish(ApiKeyCreated(api_key_id=api_key_instance.pk))
         return Response(
             {
                 "organization": OrganizationSerializer(organization).data,
@@ -206,7 +206,7 @@ class ApiKeyViewSet(
             name=serializer.validated_data["name"],
             expires_at=serializer.validated_data.get("expires_at"),
         )
-        event_bus.publish(ApiKeyCreated(api_key_id=api_key_instance.pk))
+        event_dispatcher.publish(ApiKeyCreated(api_key_id=api_key_instance.pk))
         return Response(
             {
                 **ApiKeySerializer(api_key_instance).data,
@@ -220,7 +220,7 @@ class ApiKeyViewSet(
         api_key = self.get_object()
         api_key.revoked = True
         api_key.save(update_fields=["revoked"])
-        event_bus.publish(ApiKeyRevoked(api_key_id=api_key.pk))
+        event_dispatcher.publish(ApiKeyRevoked(api_key_id=api_key.pk))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -245,11 +245,11 @@ class CustomerViewSet(
         if org is None:
             raise ValidationError("No organization in scope.")
         customer = serializer.save(organization=org)
-        event_bus.publish(CustomerCreated(customer_id=customer.pk))
+        event_dispatcher.publish(CustomerCreated(customer_id=customer.pk))
 
     def perform_update(self, serializer):
         customer = serializer.save()
-        event_bus.publish(CustomerUpdated(customer_id=customer.pk))
+        event_dispatcher.publish(CustomerUpdated(customer_id=customer.pk))
 
 
 class MemberViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
@@ -296,7 +296,7 @@ class InvitationViewSet(
             raise ValidationError({"email": "This user is already a member of this organization."})
 
         invitation = Invitation.create_for_organization(org, email, role)
-        event_bus.publish(MemberInvited(invitation_id=invitation.pk))
+        event_dispatcher.publish(MemberInvited(invitation_id=invitation.pk))
         return Response(
             {
                 **InvitationSerializer(invitation).data,
@@ -345,5 +345,5 @@ class AcceptInvitationView(APIView):
         invitation.accepted_at = timezone.now()
         invitation.save(update_fields=["accepted_at"])
 
-        event_bus.publish(MemberJoined(membership_id=membership.pk))
+        event_dispatcher.publish(MemberJoined(membership_id=membership.pk))
         return Response(OrganizationMembershipSerializer(membership).data, status=status.HTTP_201_CREATED)

@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from infrastructure.events import event_bus
+from infrastructure.events import event_dispatcher
 from invoices.application.services import InvoiceService
 from invoices.domain.models import Invoice, InvoiceStatus
 from payments.application.services import MockPaymentProvider
@@ -50,12 +50,18 @@ def test_marking_subscription_overdue_publishes_event(
     subscription.status = SubscriptionStatus.ACTIVE
     subscription.save(update_fields=["status"])
     published = []
-    event_bus.subscribe(SubscriptionOverdue, published.append)
+
+    class SpyTask:  # subscribers are Celery tasks: anything with .delay(**event_fields)
+        @staticmethod
+        def delay(**kwargs):
+            published.append(kwargs)
+
+    event_dispatcher.subscribe(SubscriptionOverdue, SpyTask)
 
     with django_capture_on_commit_callbacks(execute=True):
         SubscriptionService.mark_overdue(subscription)
 
-    assert [e.subscription_id for e in published] == [subscription.pk]
+    assert [e["subscription_id"] for e in published] == [subscription.pk]
 
 
 def test_canceling_subscription_cancels_open_invoices(

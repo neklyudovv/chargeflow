@@ -5,7 +5,7 @@ class InvoicesConfig(AppConfig):
     name = "invoices"
 
     def ready(self):
-        from infrastructure.events import event_bus
+        from infrastructure.events import event_dispatcher
         from invoices import tasks
         from payments.domain.events import PaymentFailed, PaymentSucceeded
         from subscriptions.domain.events import (
@@ -15,29 +15,19 @@ class InvoicesConfig(AppConfig):
             SubscriptionRenewed,
         )
 
-        # The bus stays the router; each handler now enqueues a Celery task
-        # (event -> task happens here, inside the subscription registration).
-        event_bus.subscribe(
-            SubscriptionCreated,
-            lambda e: tasks.generate_invoice_for_subscription.delay(e.subscription_id),
+        # The dispatcher enqueues each subscribed task itself, passing the
+        # event's fields as kwargs — task params must mirror event fields.
+        event_dispatcher.subscribe(
+            SubscriptionCreated, tasks.generate_invoice_for_subscription
         )
-        event_bus.subscribe(
-            SubscriptionActivated,
-            lambda e: tasks.generate_invoice_for_subscription.delay(e.subscription_id),
+        event_dispatcher.subscribe(
+            SubscriptionActivated, tasks.generate_invoice_for_subscription
         )
-        event_bus.subscribe(
-            SubscriptionRenewed,
-            lambda e: tasks.generate_invoice_for_subscription.delay(e.subscription_id),
+        event_dispatcher.subscribe(
+            SubscriptionRenewed, tasks.generate_invoice_for_subscription
         )
-        event_bus.subscribe(
-            PaymentSucceeded,
-            lambda e: tasks.mark_invoice_paid.delay(e.payment_attempt_id),
-        )
-        event_bus.subscribe(
-            PaymentFailed,
-            lambda e: tasks.mark_invoice_failed.delay(e.payment_attempt_id),
-        )
-        event_bus.subscribe(
-            SubscriptionCanceled,
-            lambda e: tasks.cancel_open_invoices_for_subscription.delay(e.subscription_id),
+        event_dispatcher.subscribe(PaymentSucceeded, tasks.mark_invoice_paid)
+        event_dispatcher.subscribe(PaymentFailed, tasks.mark_invoice_failed)
+        event_dispatcher.subscribe(
+            SubscriptionCanceled, tasks.cancel_open_invoices_for_subscription
         )

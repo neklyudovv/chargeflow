@@ -3,7 +3,7 @@ from rest_framework import viewsets
 from rest_framework.exceptions import ValidationError
 
 from accounts.request_context import get_request_organization
-from infrastructure.events import event_bus
+from infrastructure.events import event_dispatcher
 from plans.api.serializers import PlanSerializer
 from plans.events import PlanArchived, PlanCreated, PlanDeleted, PlanUpdated
 from plans.models import Plan, PlanStatus
@@ -23,14 +23,14 @@ class PlanViewSet(viewsets.ModelViewSet):
         if org is None:
             raise ValidationError("No organization in scope.")
         plan = serializer.save(organization=org)
-        event_bus.publish(PlanCreated(plan_id=plan.pk))
+        event_dispatcher.publish(PlanCreated(plan_id=plan.pk))
 
     def perform_update(self, serializer):
         plan = serializer.save()
         if plan.status == PlanStatus.ARCHIVED:
-            event_bus.publish(PlanArchived(plan_id=plan.pk))
+            event_dispatcher.publish(PlanArchived(plan_id=plan.pk))
         else:
-            event_bus.publish(PlanUpdated(plan_id=plan.pk))
+            event_dispatcher.publish(PlanUpdated(plan_id=plan.pk))
 
     def perform_destroy(self, instance):
         plan_id = instance.pk
@@ -42,4 +42,4 @@ class PlanViewSet(viewsets.ModelViewSet):
             raise ValidationError(
                 {"detail": "Cannot delete a plan that has subscriptions; archive it instead."}
             )
-        event_bus.publish(PlanDeleted(plan_id=plan_id))
+        event_dispatcher.publish(PlanDeleted(plan_id=plan_id))

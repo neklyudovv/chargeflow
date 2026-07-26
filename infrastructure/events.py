@@ -1,7 +1,6 @@
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Callable
 from logging import getLogger
 
 from django.db import transaction
@@ -14,26 +13,30 @@ class DomainEvent:
     occurred_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-class EventBus:
-    def __init__(self):
-        self._handlers = defaultdict(list)
+class CeleryEventDispatcher:
+    """Routes domain events to Celery tasks.
+    """
 
-    def subscribe(self, event_type, handler: Callable) -> None:
-        self._handlers[event_type].append(handler)
+    def __init__(self):
+        self._subscribers = defaultdict(list)
+
+    def subscribe(self, event_type, task) -> None:
+        self._subscribers[event_type].append(task)
 
     def publish(self, event: DomainEvent) -> None:
-        handlers = self._handlers.get(type(event), [])
+        tasks = self._subscribers.get(type(event), [])
         logger.info(f"Event published: {event}")
-        if not handlers:
+        if not tasks:
             return
-        transaction.on_commit(lambda: self._dispatch(event, handlers))
+        payload = {k: v for k, v in asdict(event).items() if k != "occurred_at"}
+        transaction.on_commit(lambda: self._enqueue(event, tasks, payload))
 
-    def _dispatch(self, event: DomainEvent, handlers: list[Callable]) -> None:
-        for handler in handlers:
+    def _enqueue(self, event, tasks, payload: dict) -> None:
+        for task in tasks:
             try:
-                handler(event)
+                task.delay(**payload)
             except Exception:
-                logger.exception(f"Event handler {handler} failed for event {event}")
+                logger.exception(f"Failed to enqueue {task} for event {event}")
 
 
-event_bus = EventBus()
+event_dispatcher = CeleryEventDispatcher()
