@@ -199,14 +199,14 @@ def test_database_rejects_a_second_success_attempt_per_invoice(invoice):
         )
 
 
-def test_redelivered_issued_event_does_not_charge_failed_or_overdue_invoice(
+def test_charge_task_skips_a_failed_or_overdue_invoice(
     subscription, invoice, monkeypatch, django_capture_on_commit_callbacks
 ):
     _force(subscription, SubscriptionStatus.ACTIVE)
     _force(invoice, InvoiceStatus.ISSUED)
     _decline(monkeypatch)
 
-    # the decline fails the invoice through the event chain
+    # the decline fails the invoice
     with django_capture_on_commit_callbacks(execute=True):
         charge_invoice(invoice.pk)
     invoice.refresh_from_db()
@@ -220,8 +220,8 @@ def test_redelivered_issued_event_does_not_charge_failed_or_overdue_invoice(
     assert PaymentAttempt.objects.filter(invoice=invoice).count() == 1
 
 
-# an issued invoice is charged once per issue, whatever delivers the event
-def test_redelivered_issued_event_does_not_charge_the_same_issue_twice(subscription, invoice):
+# an issued invoice is charged once per issue
+def test_charge_task_does_not_charge_the_same_issue_twice(subscription, invoice):
     _force(subscription, SubscriptionStatus.ACTIVE)
     invoice.transition_to(InvoiceStatus.ISSUED)
     PaymentAttempt.objects.create(invoice=invoice, amount=invoice.total, status=PaymentStatus.FAILED)

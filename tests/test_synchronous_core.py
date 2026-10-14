@@ -3,13 +3,16 @@ transaction through direct service calls; the only deferred work is handing a ch
 to the worker, and a lost hand-off is recoverable
 """
 import importlib.util
+import re
 from datetime import timedelta
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from invoices.domain.models import Invoice, InvoiceStatus
-from invoices.tasks import MAX_DUNNING_ATTEMPTS, run_dunning
+from invoices.tasks import MAX_DUNNING_ATTEMPTS, _dun_invoice, run_dunning
 from payments.application.services import MockPaymentProvider, PaymentService
 from payments.domain.models import PaymentAttempt, PaymentStatus
 from subscriptions.application.services import SubscriptionService
@@ -165,3 +168,73 @@ def test_lost_charge_hand_off_surfaces_and_is_recovered(
 
 def test_the_in_process_event_bus_is_gone():
     assert importlib.util.find_spec("infrastructure") is None
+
+
+def test_dunning_does_not_cancel_a_subscription_whose_invoice_got_paid_meanwhile(
+    subscription, invoice
+):
+    # run_dunning listed the invoice as FAILED; a payment settled it before its turn came
+    _force(subscription, SubscriptionStatus.ACTIVE)
+    _force(invoice, InvoiceStatus.PAID)
+    for _ in range(MAX_DUNNING_ATTEMPTS):
+        PaymentAttempt.objects.create(
+            invoice=invoice, amount=invoice.total, status=PaymentStatus.FAILED
+        )
+
+    _dun_invoice(invoice.pk)
+
+    subscription.refresh_from_db()
+    assert subscription.status == SubscriptionStatus.ACTIVE
+
+
+LOCK_ORDER = ["subscriptions_subscription", "invoices_invoice", "payments_paymentattempt"]
+
+
+def _charge(subscription, invoice):
+    PaymentService.charge_issued(invoice.pk)
+
+
+def _manual_attempt(subscription, invoice):
+    PaymentService.attempt(invoice)
+
+
+def _webhook(subscription, invoice):
+    attempt = PaymentAttempt.objects.create(invoice=invoice, amount=invoice.total)
+    PaymentService.handle_webhook(
+        "payment.updated", {"payment_attempt_id": attempt.pk, "status": "success"}
+    )
+
+
+def _dunning_exhaustion(subscription, invoice):
+    _force(invoice, InvoiceStatus.FAILED)
+    for _ in range(MAX_DUNNING_ATTEMPTS):
+        PaymentAttempt.objects.create(
+            invoice=invoice, amount=invoice.total, status=PaymentStatus.FAILED
+        )
+    _dun_invoice(invoice.pk)
+
+
+def _cancel(subscription, invoice):
+    SubscriptionService.cancel(subscription)
+
+
+@pytest.mark.skipif(connection.vendor != "postgresql", reason="sqlite emits no FOR UPDATE")
+@pytest.mark.parametrize("action", [_charge, _manual_attempt, _webhook, _dunning_exhaustion, _cancel])
+def test_row_locks_are_taken_subscription_first(
+    subscription, invoice, action, django_capture_on_commit_callbacks
+):
+    # every path that may settle shares one lock order, or two of them deadlock
+    _force(subscription, SubscriptionStatus.ACTIVE)
+    _force(invoice, InvoiceStatus.ISSUED)
+
+    with CaptureQueriesContext(connection) as ctx, django_capture_on_commit_callbacks(execute=False):
+        action(subscription, invoice)
+
+    locked = [
+        re.search(r'FROM "(\w+)"', q["sql"]).group(1)
+        for q in ctx.captured_queries
+        if "FOR UPDATE" in q["sql"]
+    ]
+    first_acquisitions = list(dict.fromkeys(locked))
+    ranks = [LOCK_ORDER.index(table) for table in first_acquisitions]
+    assert ranks == sorted(ranks), first_acquisitions
