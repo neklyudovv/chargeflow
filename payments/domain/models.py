@@ -27,7 +27,7 @@ class PaymentAttempt(models.Model):
     # The provider reported success that could not be applied to the invoice
     # (canceled, or already paid by another attempt): money may have been
     # taken, so someone must refund or reconcile it.
-    needs_reconciliation = models.BooleanField(default=False)
+    needs_reconciliation = models.BooleanField(default=False, db_default=False)
 
     class Meta:
         app_label = "payments"

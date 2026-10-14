@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db import transaction
 
 from infrastructure.events import event_dispatcher
-from invoices.domain.models import PAYABLE_INVOICE_STATUSES, Invoice
+from invoices.domain.models import PAYABLE_INVOICE_STATUSES, Invoice, InvoiceStatus
 from payments.domain.events import PaymentFailed, PaymentSucceeded, WebhookReceived
 from payments.domain.models import PaymentAttempt, PaymentStatus, WebhookEvent
 
@@ -33,6 +33,13 @@ class PaymentService:
             raise InvoiceNotPayable(
                 f"Cannot attempt payment on invoice in status '{invoice.status}'"
             )
+        # an issued invoice is charged once per issue; a retry comes through a reissue
+        if invoice.status == InvoiceStatus.ISSUED and invoice.issued_at:
+            this_issue = invoice.payment_attempts.filter(
+                attempted_at__gte=invoice.issued_at
+            ).first()
+            if this_issue:
+                return this_issue
         existing = invoice.payment_attempts.filter(
             status__in=[PaymentStatus.PENDING, PaymentStatus.SUCCESS]
         ).first()

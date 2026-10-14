@@ -20,7 +20,7 @@ class InvoiceService:
     @staticmethod
     @transaction.atomic
     def generate_for_subscription(subscription) -> Invoice | None:
-        subscription = Subscription.objects.select_for_update().select_related("plan").get(pk=subscription.pk)
+        subscription = Subscription.objects.select_for_update(of=("self",)).select_related("plan").get(pk=subscription.pk)
         # Only ACTIVE subscriptions are billed: TRIAL is free, OVERDUE owes
         # arrears, CANCELED is closed.
         if subscription.status != SubscriptionStatus.ACTIVE:
