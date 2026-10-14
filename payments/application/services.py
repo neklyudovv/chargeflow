@@ -69,6 +69,15 @@ class PaymentService:
 
     @staticmethod
     @transaction.atomic
+    def charge_issued(invoice_id) -> PaymentAttempt | None:
+        # the InvoiceIssued handler: only the current issue is charged, decided under the lock
+        invoice = Invoice.objects.select_for_update().get(pk=invoice_id)
+        if invoice.status != InvoiceStatus.ISSUED:
+            return None
+        return PaymentService.attempt(invoice)
+
+    @staticmethod
+    @transaction.atomic
     def handle_webhook(event_type: str, payload: dict) -> None:
         existing = WebhookEvent.objects.filter(
             event_type=event_type,
