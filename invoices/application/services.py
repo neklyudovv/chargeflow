@@ -12,17 +12,13 @@ from subscriptions.domain.models import Subscription, SubscriptionStatus
 
 
 class InvoiceService:
-    # Every method re-reads its row under lock instead of trusting the instance
-    # it was given: dunning and webhooks read the same rows concurrently, and a
-    # stale instance used to carry a FAILED status into a row that had been
-    # canceled or paid in the meantime.
+    # every method re-reads its row under lock: dunning and webhooks race on the same rows
 
     @staticmethod
     @transaction.atomic
     def generate_for_subscription(subscription) -> Invoice | None:
         subscription = Subscription.objects.select_for_update(of=("self",)).select_related("plan").get(pk=subscription.pk)
-        # Only ACTIVE subscriptions are billed: TRIAL is free, OVERDUE owes
-        # arrears, CANCELED is closed.
+        # only ACTIVE subscriptions are billed
         if subscription.status != SubscriptionStatus.ACTIVE:
             return None
         # One invoice per subscription, billing period. get_or_create

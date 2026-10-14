@@ -24,9 +24,7 @@ class PaymentAttempt(models.Model):
         max_length=255, null=True, blank=True, unique=True
     )
     attempted_at = models.DateTimeField(auto_now_add=True)
-    # The provider reported success that could not be applied to the invoice
-    # (canceled, or already paid by another attempt): money may have been
-    # taken, so someone must refund or reconcile it.
+    # a provider success that could not be applied to the invoice: money may need a refund
     needs_reconciliation = models.BooleanField(default=False, db_default=False)
 
     class Meta:

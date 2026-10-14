@@ -91,7 +91,7 @@ class PaymentService:
             return
 
         try:
-            # Lock order is invoice -> attempt everywhere.
+            # lock order is invoice -> attempt everywhere
             invoice_id = PaymentAttempt.objects.values_list("invoice_id", flat=True).get(pk=payment_id)
             invoice = Invoice.objects.select_for_update().get(pk=invoice_id)
             payment = PaymentAttempt.objects.select_for_update().get(pk=payment_id)

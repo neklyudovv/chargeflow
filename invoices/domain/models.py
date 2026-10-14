@@ -72,9 +72,7 @@ class Invoice(models.Model):
             fields["issued_at"] = fields["updated_at"]
         elif new_status == InvoiceStatus.PAID:
             fields["paid_at"] = fields["updated_at"]
-        # Compare-and-set on the status we validated against, writing only the
-        # columns that change: a blind save() would carry stale values over a
-        # row that moved since it was read.
+        # compare-and-set: refuse a row that moved since it was read
         if not Invoice.objects.filter(pk=self.pk, status=self.status).update(**fields):
             raise InvalidStatusTransition(
                 f"Invoice changed from '{self.status}' underneath the transition to '{new_status}'"

@@ -110,9 +110,7 @@ class SubscriptionService:
     @staticmethod
     @transaction.atomic
     def reactivate(subscription: Subscription) -> None:
-        # Recovery from a dunning success: only OVERDUE -> ACTIVE, and only once
-        # no failed invoices are left. Checked under the lock so a concurrent
-        # cancel or a new failure cannot be overwritten.
+        # only OVERDUE -> ACTIVE, and only once no failed invoices are left
         subscription = Subscription.objects.select_for_update().get(pk=subscription.pk)
         if subscription.status != SubscriptionStatus.OVERDUE:
             return
@@ -123,9 +121,7 @@ class SubscriptionService:
         try:
             subscription.transition_to(SubscriptionStatus.ACTIVE)
         except InvalidStatusTransition:
-            # Unreachable under a real row lock; on a backend without locks
-            # (SQLite) a concurrent cancel can still land between the read and
-            # the write. The newer state wins and there is nothing left to do.
+            # unreachable under a real lock; without one (sqlite) the newer state wins
             return
 
     @staticmethod

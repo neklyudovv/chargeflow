@@ -11,7 +11,7 @@ RETRY = {"autoretry_for": (OperationalError,), "max_retries": 5, "retry_backoff"
 @shared_task(**RETRY)
 def attempt_payment_for_invoice(invoice_id):
     invoice = Invoice.objects.get(pk=invoice_id)
-    # A re-delivered event must not retry outside the dunning schedule.
+    # a redelivered event must not retry outside the dunning schedule
     if invoice.status != InvoiceStatus.ISSUED:
         return
     try:
