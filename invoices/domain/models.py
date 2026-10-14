@@ -67,12 +67,20 @@ class Invoice(models.Model):
             raise InvalidStatusTransition(
                 f"Cannot transition from '{self.status}' to '{new_status}'"
             )
-        self.status = new_status
+        fields = {"status": new_status, "updated_at": timezone.now()}
         if new_status == InvoiceStatus.ISSUED:
-            self.issued_at = timezone.now()
+            fields["issued_at"] = fields["updated_at"]
         elif new_status == InvoiceStatus.PAID:
-            self.paid_at = timezone.now()
-        self.save(update_fields=["status", "issued_at", "paid_at", "updated_at"])
+            fields["paid_at"] = fields["updated_at"]
+        # Compare-and-set on the status we validated against, writing only the
+        # columns that change: a blind save() would carry stale values over a
+        # row that moved since it was read.
+        if not Invoice.objects.filter(pk=self.pk, status=self.status).update(**fields):
+            raise InvalidStatusTransition(
+                f"Invoice changed from '{self.status}' underneath the transition to '{new_status}'"
+            )
+        for name, value in fields.items():
+            setattr(self, name, value)
 
 
 class InvoiceLine(models.Model):

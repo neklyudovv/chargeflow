@@ -1,4 +1,5 @@
 import random
+from logging import getLogger
 
 from django.conf import settings
 from django.db import transaction
@@ -7,6 +8,8 @@ from infrastructure.events import event_dispatcher
 from invoices.domain.models import PAYABLE_INVOICE_STATUSES, Invoice
 from payments.domain.events import PaymentFailed, PaymentSucceeded, WebhookReceived
 from payments.domain.models import PaymentAttempt, PaymentStatus, WebhookEvent
+
+logger = getLogger(__name__)
 
 
 class InvoiceNotPayable(Exception):
@@ -81,6 +84,9 @@ class PaymentService:
             return
 
         try:
+            # Lock order is invoice -> attempt everywhere.
+            invoice_id = PaymentAttempt.objects.values_list("invoice_id", flat=True).get(pk=payment_id)
+            invoice = Invoice.objects.select_for_update().get(pk=invoice_id)
             payment = PaymentAttempt.objects.select_for_update().get(pk=payment_id)
         except PaymentAttempt.DoesNotExist:
             webhook.processed = True
@@ -92,10 +98,21 @@ class PaymentService:
         # nor reemit success. Only act while it hasnt succeeded yet.
         if payment.status != PaymentStatus.SUCCESS:
             if status == "success":
-                payment.status = PaymentStatus.SUCCESS
                 payment.provider_response = payload
-                payment.save(update_fields=["status", "provider_response"])
-                event_dispatcher.publish(PaymentSucceeded(payment_attempt_id=payment.pk))
+                if (
+                    invoice.status in PAYABLE_INVOICE_STATUSES
+                    and not invoice.payment_attempts.filter(status=PaymentStatus.SUCCESS).exists()
+                ):
+                    payment.status = PaymentStatus.SUCCESS
+                    payment.save(update_fields=["status", "provider_response"])
+                    event_dispatcher.publish(PaymentSucceeded(payment_attempt_id=payment.pk))
+                else:
+                    payment.needs_reconciliation = True
+                    payment.save(update_fields=["provider_response", "needs_reconciliation"])
+                    logger.error(
+                        "Provider success for payment attempt %s cannot be applied to invoice %s (status '%s')",
+                        payment.pk, invoice.pk, invoice.status,
+                    )
             elif status == "failed" and payment.status != PaymentStatus.FAILED:
                 payment.status = PaymentStatus.FAILED
                 payment.provider_response = payload

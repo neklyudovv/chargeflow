@@ -6,7 +6,7 @@ from django.db import OperationalError
 from invoices.application.services import InvoiceService
 from invoices.domain.models import Invoice, InvoiceStatus
 from payments.domain.models import PaymentAttempt, PaymentStatus
-from subscriptions.domain.models import Subscription, SubscriptionStatus
+from subscriptions.domain.models import Subscription
 
 # db errors retry with backoff
 # logic errors are not listed here, so they surface instead of looping forever
@@ -19,9 +19,7 @@ MAX_DUNNING_ATTEMPTS = 3
 
 @shared_task(**RETRY)
 def generate_invoice_for_subscription(subscription_id):
-    subscription = Subscription.objects.select_related("plan").get(pk=subscription_id)
-    if subscription.status == SubscriptionStatus.TRIAL:
-        return
+    subscription = Subscription.objects.get(pk=subscription_id)
     InvoiceService.generate_for_subscription(subscription)
 
 

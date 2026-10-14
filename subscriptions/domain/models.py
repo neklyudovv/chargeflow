@@ -62,7 +62,15 @@ class Subscription(models.Model):
             raise InvalidStatusTransition(
                 f"Cannot transition from '{self.status}' to '{new_status}'"
             )
-        self.status = new_status
+        fields = {"status": new_status, "updated_at": timezone.now()}
         if new_status == SubscriptionStatus.CANCELED:
-            self.canceled_at = timezone.now()
-        self.save(update_fields=["status", "canceled_at", "updated_at"])
+            fields["canceled_at"] = fields["updated_at"]
+        # Compare-and-set on the status we validated against, writing only the
+        # columns that change: a blind save() would carry stale values over a
+        # row that moved since it was read.
+        if not Subscription.objects.filter(pk=self.pk, status=self.status).update(**fields):
+            raise InvalidStatusTransition(
+                f"Subscription changed from '{self.status}' underneath the transition to '{new_status}'"
+            )
+        for name, value in fields.items():
+            setattr(self, name, value)

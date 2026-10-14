@@ -15,6 +15,9 @@ from subscriptions.domain.models import SubscriptionStatus
 def test_issued_invoice_is_charged_and_marked_paid(
     subscription, django_capture_on_commit_callbacks
 ):
+    # only ACTIVE subscriptions are billed
+    subscription.status = SubscriptionStatus.ACTIVE
+    subscription.save(update_fields=["status"])
     with django_capture_on_commit_callbacks(execute=True):
         invoice = InvoiceService.generate_for_subscription(subscription)
 

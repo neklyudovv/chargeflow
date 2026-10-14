@@ -6,8 +6,8 @@ from payments.domain.models import PaymentAttempt
 class PaymentAttemptSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentAttempt
-        fields = ["id", "invoice", "status", "amount", "provider_response", "attempted_at"]
-        read_only_fields = ["id", "status", "provider_response", "attempted_at"]
+        fields = ["id", "invoice", "status", "amount", "provider_response", "attempted_at", "needs_reconciliation"]
+        read_only_fields = ["id", "status", "provider_response", "attempted_at", "needs_reconciliation"]
 
 
 class PaymentAttemptCreateSerializer(serializers.Serializer):

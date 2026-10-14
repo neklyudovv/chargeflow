@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from accounts.models import Customer
 from infrastructure.events import event_dispatcher
+from invoices.domain.models import InvoiceStatus
 from plans.models import Plan, PlanStatus
 from subscriptions.domain.events import (
     SubscriptionActivated,
@@ -16,6 +17,7 @@ from subscriptions.domain.events import (
 )
 from subscriptions.domain.models import (
     CancellationReason,
+    InvalidStatusTransition,
     Subscription,
     SubscriptionStatus,
 )
@@ -99,6 +101,7 @@ class SubscriptionService:
     @staticmethod
     @transaction.atomic
     def mark_overdue(subscription: Subscription) -> None:
+        subscription = Subscription.objects.select_for_update().get(pk=subscription.pk)
         if subscription.status != SubscriptionStatus.ACTIVE:
             return
         subscription.transition_to(SubscriptionStatus.OVERDUE)
@@ -106,10 +109,32 @@ class SubscriptionService:
 
     @staticmethod
     @transaction.atomic
+    def reactivate(subscription: Subscription) -> None:
+        # Recovery from a dunning success: only OVERDUE -> ACTIVE, and only once
+        # no failed invoices are left. Checked under the lock so a concurrent
+        # cancel or a new failure cannot be overwritten.
+        subscription = Subscription.objects.select_for_update().get(pk=subscription.pk)
+        if subscription.status != SubscriptionStatus.OVERDUE:
+            return
+        if subscription.invoices.filter(
+            status__in=[InvoiceStatus.FAILED, InvoiceStatus.OVERDUE]
+        ).exists():
+            return
+        try:
+            subscription.transition_to(SubscriptionStatus.ACTIVE)
+        except InvalidStatusTransition:
+            # Unreachable under a real row lock; on a backend without locks
+            # (SQLite) a concurrent cancel can still land between the read and
+            # the write. The newer state wins and there is nothing left to do.
+            return
+
+    @staticmethod
+    @transaction.atomic
     def cancel(
         subscription: Subscription,
         reason: str = CancellationReason.VOLUNTARY,
     ) -> None:
+        subscription = Subscription.objects.select_for_update().get(pk=subscription.pk)
         subscription.transition_to(SubscriptionStatus.CANCELED)
         subscription.canceled_reason = reason
         subscription.save(update_fields=["canceled_reason", "updated_at"])
