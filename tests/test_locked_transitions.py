@@ -239,3 +239,28 @@ def test_redelivered_issued_event_does_not_charge_failed_or_overdue_invoice(
     _force(invoice, InvoiceStatus.OVERDUE)
     attempt_payment_for_invoice(invoice.pk)
     assert PaymentAttempt.objects.filter(invoice=invoice).count() == 1
+
+
+# AC8: two deliveries of the same "invoice issued" event, the second arriving
+# before the first one's outcome hop (mark_invoice_failed) has run. The invoice
+# is still ISSUED, so the status check alone does not help: an issued invoice
+# is charged at most once per issue.
+def test_concurrent_redelivery_before_the_failure_hop_charges_once(
+    subscription, invoice, monkeypatch, django_capture_on_commit_callbacks
+):
+    _force(subscription, SubscriptionStatus.ACTIVE)
+    invoice.transition_to(InvoiceStatus.ISSUED)
+    _decline(monkeypatch)
+
+    # first delivery: the charge is declined, but its PaymentFailed callback is
+    # captured and never executed, so the invoice stays ISSUED
+    with django_capture_on_commit_callbacks(execute=False):
+        attempt_payment_for_invoice(invoice.pk)
+    invoice.refresh_from_db()
+    assert invoice.status == InvoiceStatus.ISSUED
+    assert PaymentAttempt.objects.filter(invoice=invoice).count() == 1
+
+    with django_capture_on_commit_callbacks(execute=True):
+        attempt_payment_for_invoice(invoice.pk)
+
+    assert PaymentAttempt.objects.filter(invoice=invoice).count() == 1
