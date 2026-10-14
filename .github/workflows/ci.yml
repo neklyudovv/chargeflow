@@ -53,3 +53,64 @@ jobs:
 
       - name: Run tests with coverage
         run: pytest --cov --cov-report=term-missing --cov-fail-under=70
+
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: chargeflow
+          POSTGRES_USER: chargeflow
+          POSTGRES_PASSWORD: chargeflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U chargeflow"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    env:
+      DJANGO_SECRET_KEY: ci-insecure-test-key
+      DJANGO_DEBUG: "False"
+      POSTGRES_DB: chargeflow
+      POSTGRES_USER: chargeflow
+      POSTGRES_PASSWORD: chargeflow
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      CELERY_BROKER_URL: redis://localhost:6379/0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Migrate
+        run: python manage.py migrate --noinput
+
+      - name: Start worker
+        run: celery -A config worker -Q io,batch --loglevel=info --concurrency=1 > worker.log 2>&1 &
+
+      - name: Run the billing chain through the worker
+        run: python scripts/e2e_chain.py
+        env:
+          PYTHONPATH: .
+
+      - name: Worker log
+        if: failure()
+        run: cat worker.log
