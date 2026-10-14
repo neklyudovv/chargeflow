@@ -2,7 +2,30 @@ from datetime import timedelta
 
 import pytest
 from django.core.cache import cache
+from django.test import override_settings
 from django.utils import timezone
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _isolate_from_env():
+    # settings.py loads .env, and a developer's .env usually points the broker
+    # and the throttle cache at docker hosts. Tests must run inline and
+    # in-memory regardless, or they fail on a connection error instead of on
+    # the thing under test. Done on the live settings: conftest is imported
+    # after django.setup(), so environment variables are too late here.
+    # Eager mode still acquires a producer on the broker, hence memory://;
+    # broker_url itself reads the environment, so only the write url can be set.
+    from config.celery import app as celery_app
+
+    celery_app.conf.broker_write_url = "memory://"
+    locmem = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+    with override_settings(
+        CELERY_TASK_ALWAYS_EAGER=True,
+        CELERY_TASK_EAGER_PROPAGATES=True,
+        CACHES=locmem,
+        PAYMENT_FAILURE_RATE=0.0,
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)
