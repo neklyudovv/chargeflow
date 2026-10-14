@@ -8,12 +8,19 @@ from invoices.domain.events import (
     InvoicePaid,
 )
 from invoices.domain.models import Invoice, InvoiceLine, InvoiceStatus
+from subscriptions.domain.models import Subscription, SubscriptionStatus
 
 
 class InvoiceService:
+    # every method re-reads its row under lock: dunning and webhooks race on the same rows
+
     @staticmethod
     @transaction.atomic
-    def generate_for_subscription(subscription) -> Invoice:
+    def generate_for_subscription(subscription) -> Invoice | None:
+        subscription = Subscription.objects.select_for_update(of=("self",)).select_related("plan").get(pk=subscription.pk)
+        # only ACTIVE subscriptions are billed
+        if subscription.status != SubscriptionStatus.ACTIVE:
+            return None
         # One invoice per subscription, billing period. get_or_create
         # + db unique constraint make this safe to call more than once for the
         # same period (e.g. a retried task or a re-delivered event)
@@ -41,6 +48,7 @@ class InvoiceService:
     @staticmethod
     @transaction.atomic
     def mark_paid(invoice: Invoice) -> None:
+        invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
         if invoice.status == InvoiceStatus.PAID:
             return
         invoice.transition_to(InvoiceStatus.PAID)
@@ -49,6 +57,7 @@ class InvoiceService:
     @staticmethod
     @transaction.atomic
     def mark_failed(invoice: Invoice) -> None:
+        invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
         # An OVERDUE invoice is still payable, but dunning has already given up
         # on it: a further rejection records the attempt and leaves it OVERDUE.
         if invoice.status != InvoiceStatus.ISSUED:
@@ -61,7 +70,7 @@ class InvoiceService:
     def cancel_open_for_subscription(subscription) -> None:
         # when a subscription is canceled, stop pursuing its still open invoices
         # so dunning no longer retries them.
-        open_invoices = subscription.invoices.filter(
+        open_invoices = subscription.invoices.select_for_update().filter(
             status__in=[
                 InvoiceStatus.DRAFT,
                 InvoiceStatus.ISSUED,
@@ -74,6 +83,7 @@ class InvoiceService:
     @staticmethod
     @transaction.atomic
     def mark_overdue(invoice: Invoice) -> None:
+        invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
         if invoice.status != InvoiceStatus.FAILED:
             return
         invoice.transition_to(InvoiceStatus.OVERDUE)
@@ -82,6 +92,7 @@ class InvoiceService:
     @staticmethod
     @transaction.atomic
     def reissue_for_retry(invoice: Invoice) -> None:
+        invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
         # move a failed invoice back to ISSUED and reemit the event so
         # the normal payment flow charges it again 
         # only FAILED invoices are reissued

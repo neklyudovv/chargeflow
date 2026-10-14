@@ -28,7 +28,8 @@ def test_generate_task_creates_invoice_for_active_subscription(subscription):
 
 def test_generate_is_idempotent_per_period(subscription):
     # re-delivered event / retried task must not create a second invoice
-    # for the same billing period
+    # for the same billing period (only ACTIVE subscriptions are billed)
+    _force_status(subscription, SubscriptionStatus.ACTIVE)
     first = InvoiceService.generate_for_subscription(subscription)
     second = InvoiceService.generate_for_subscription(subscription)
 

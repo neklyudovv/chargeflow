@@ -24,9 +24,18 @@ class PaymentAttempt(models.Model):
         max_length=255, null=True, blank=True, unique=True
     )
     attempted_at = models.DateTimeField(auto_now_add=True)
+    # a provider success that could not be applied to the invoice: money may need a refund
+    needs_reconciliation = models.BooleanField(default=False, db_default=False)
 
     class Meta:
         app_label = "payments"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["invoice"],
+                condition=models.Q(status=PaymentStatus.SUCCESS),
+                name="one_success_per_invoice",
+            ),
+        ]
 
     def __str__(self):
         return f"Payment #{self.pk} - {self.invoice} ({self.status})"

@@ -4,7 +4,7 @@ from celery import shared_task
 from django.db import OperationalError, transaction
 from django.utils import timezone
 
-from invoices.domain.models import Invoice, InvoiceStatus
+from invoices.domain.models import Invoice
 from subscriptions.application.services import SubscriptionService
 from subscriptions.domain.models import (
     CancellationReason,
@@ -27,16 +27,7 @@ def mark_subscription_overdue_for_invoice(invoice_id):
 @shared_task(**RETRY)
 def mark_subscription_active_for_invoice(invoice_id):
     invoice = Invoice.objects.select_related("subscription").get(pk=invoice_id)
-    subscription = invoice.subscription
-    # Recover from a dunning success: only OVERDUE -> ACTIVE, and only once the
-    # subscription has no other failed invoices left. Safe to retry.
-    if subscription.status != SubscriptionStatus.OVERDUE:
-        return
-    if subscription.invoices.filter(
-        status__in=[InvoiceStatus.FAILED, InvoiceStatus.OVERDUE]
-    ).exists():
-        return
-    subscription.transition_to(SubscriptionStatus.ACTIVE)
+    SubscriptionService.reactivate(invoice.subscription)
 
 
 @shared_task(**RETRY)

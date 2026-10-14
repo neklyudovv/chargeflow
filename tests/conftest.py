@@ -2,7 +2,25 @@ from datetime import timedelta
 
 import pytest
 from django.core.cache import cache
+from django.test import override_settings
 from django.utils import timezone
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _isolate_from_env():
+    # tests run inline and in-memory whatever the developer's .env says
+    # (broker_url reads the environment directly, so only the write url can be swapped)
+    from config.celery import app as celery_app
+
+    celery_app.conf.broker_write_url = "memory://"
+    locmem = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+    with override_settings(
+        CELERY_TASK_ALWAYS_EAGER=True,
+        CELERY_TASK_EAGER_PROPAGATES=True,
+        CACHES=locmem,
+        PAYMENT_FAILURE_RATE=0.0,
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)
