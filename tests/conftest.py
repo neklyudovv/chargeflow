@@ -25,9 +25,7 @@ def _isolate_from_env():
 
 @pytest.fixture(autouse=True)
 def _clear_throttle_cache():
-    # Throttle counters live in the cache, which is shared
-    # for the whole process. Clear it around each test so limits dont leak
-    # across tests and flake the suite
+    # locmem counters live for the whole process and org pks repeat across rolled-back tests
     cache.clear()
     yield
     cache.clear()
@@ -75,7 +73,7 @@ def customer(db, organization):
 
 @pytest.fixture
 def subscription(db, customer, plan):
-    """a fresh subscription. defaults to TRIAL status"""
+    # defaults to TRIAL
     from subscriptions.domain.models import Subscription
 
     now = timezone.now()
@@ -89,7 +87,7 @@ def subscription(db, customer, plan):
 
 @pytest.fixture
 def invoice(db, subscription):
-    """a fresh invoice for the subscription, defaults to DRAFT status"""
+    # defaults to DRAFT
     from invoices.domain.models import Invoice
 
     now = timezone.now()

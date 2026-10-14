@@ -92,7 +92,7 @@ def test_org_cannot_see_another_orgs_subscriptions(org_a, org_b):
 
 
 def test_unresolved_org_returns_empty_not_forbidden(db):
-    # Authenticated, but no membership -> org can't be resolved.
+    # authenticated, but without a membership no org resolves
     user = User(email="loner@example.com")
     user.set_password("pw-123456!")
     user.save()

@@ -9,7 +9,7 @@ def _force_status(obj, status):
 
 
 def test_generate_skips_trial_subscription(subscription):
-    # subscription fixture defaults to TRIAL - no invoice during trial
+    # the fixture is in TRIAL, which is not billed
     InvoiceService.generate_for_subscription(subscription)
 
     assert not Invoice.objects.filter(subscription=subscription).exists()
@@ -24,8 +24,6 @@ def test_generate_creates_invoice_for_active_subscription(subscription):
 
 
 def test_generate_is_idempotent_per_period(subscription):
-    # re-delivered event / retried task must not create a second invoice
-    # for the same billing period (only ACTIVE subscriptions are billed)
     _force_status(subscription, SubscriptionStatus.ACTIVE)
     first = InvoiceService.generate_for_subscription(subscription)
     second = InvoiceService.generate_for_subscription(subscription)
@@ -38,15 +36,14 @@ def test_mark_paid_is_idempotent(invoice):
     _force_status(invoice, InvoiceStatus.ISSUED)
 
     InvoiceService.mark_paid(invoice)
-    InvoiceService.mark_paid(invoice) # second call must not raise
+    InvoiceService.mark_paid(invoice)
 
     invoice.refresh_from_db()
     assert invoice.status == InvoiceStatus.PAID
 
 
 def test_mark_failed_keeps_overdue_invoice_overdue(invoice):
-    # dunning already gave up on this one; another rejected charge must not
-    # walk it back into FAILED (and must not raise)
+    # dunning already gave up on this invoice
     _force_status(invoice, InvoiceStatus.OVERDUE)
 
     InvoiceService.mark_failed(invoice)
@@ -56,8 +53,7 @@ def test_mark_failed_keeps_overdue_invoice_overdue(invoice):
 
 
 def test_late_success_pays_a_failed_invoice(invoice):
-    # provider confirms a charge we had locally rejected - the invoice must
-    # still close as paid
+    # the provider confirms a charge that was recorded as rejected
     _force_status(invoice, InvoiceStatus.FAILED)
 
     InvoiceService.mark_paid(invoice)

@@ -36,8 +36,7 @@ def test_failed_webhook_marks_payment_failed(payment_attempt):
 
 
 def test_late_failed_webhook_does_not_unsucceed_payment(payment_attempt):
-    # A succeeded payment is terminal: a stray/late "failed" webhook (different
-    # payload, so not deduped) must not flip it back to failed
+    # the payload differs, so dedup does not catch it
     PaymentService.handle_webhook(
         "payment.updated",
         {"payment_attempt_id": payment_attempt.pk, "status": "success"},
@@ -57,7 +56,6 @@ def test_duplicate_webhook_is_processed_once(payment_attempt):
     PaymentService.handle_webhook("payment.updated", payload)
     PaymentService.handle_webhook("payment.updated", payload)
 
-    # The redelivery short-circuits on the processed row, so nothing is stored twice.
     stored = WebhookEvent.objects.filter(event_type="payment.updated", payload=payload)
     assert stored.count() == 1
 

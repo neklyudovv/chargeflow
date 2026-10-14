@@ -19,8 +19,7 @@ def test_renewals_bill_an_expired_active_subscription(
 ):
     _set(subscription, SubscriptionStatus.ACTIVE, timezone.now() - timedelta(hours=1))
 
-    # events reach their handlers on commit, so the billing chain only runs
-    # once the callbacks fire
+    # the charge hand-off runs on commit
     with django_capture_on_commit_callbacks(execute=True):
         run_renewals()
 
@@ -41,8 +40,7 @@ def test_renewals_skip_a_subscription_mid_period(subscription):
 
 
 def test_renewals_skip_an_overdue_subscription(subscription):
-    # dunning owns OVERDUE subscriptions - renewing would bill a customer
-    # who has not paid for the period they already have
+    # dunning owns OVERDUE subscriptions: renewing would bill an unpaid period again
     _set(subscription, SubscriptionStatus.OVERDUE, timezone.now() - timedelta(hours=1))
 
     run_renewals()
@@ -99,7 +97,7 @@ def test_one_bad_subscription_does_not_hold_up_the_batch(
     monkeypatch.setattr(SubscriptionService, "renew", staticmethod(boom))
 
     with django_capture_on_commit_callbacks(execute=True):
-        run_renewals()  # must not raise
+        run_renewals()
 
     healthy.refresh_from_db()
     assert healthy.current_period_end > timezone.now()
@@ -108,7 +106,6 @@ def test_one_bad_subscription_does_not_hold_up_the_batch(
 def test_renewals_are_idempotent_within_a_cycle(
     subscription, django_capture_on_commit_callbacks
 ):
-    # a second cycle before the new period ends must not bill twice
     _set(subscription, SubscriptionStatus.ACTIVE, timezone.now() - timedelta(hours=1))
 
     with django_capture_on_commit_callbacks(execute=True):

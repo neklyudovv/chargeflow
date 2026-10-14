@@ -25,7 +25,6 @@ ILLEGAL_EDGES = [
 
 
 def _force_status(subscription, status):
-    """Arrange a starting state without going through the FSM."""
     subscription.status = status
     subscription.save(update_fields=["status"])
 

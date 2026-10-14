@@ -48,9 +48,7 @@ def test_attempt_records_decline_when_provider_fails(invoice, monkeypatch):
 
 
 def test_attempt_replays_by_idempotency_key(invoice, monkeypatch):
-    # a declined charge leaves the invoice payable again, so without a key a retry
-    # would create a fresh attempt. The same idempotency key must instead replay
-    # the original attempt and not charge twice
+    # a decline leaves the invoice payable, so only the key keeps the retry from charging again
     monkeypatch.setattr(MockPaymentProvider, "charge", lambda amount, currency: False)
     _force_status(invoice, InvoiceStatus.ISSUED)
 

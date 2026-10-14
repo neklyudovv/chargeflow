@@ -31,7 +31,7 @@ def auth_client(member):
 
 def test_register_is_throttled_by_ip(db):
     client = APIClient()
-    # unique email each time so a rejection is the throttle, not a duplicate
+    # a unique email keeps a rejection from being a duplicate
     statuses = [
         client.post(
             REGISTER_URL,
@@ -41,7 +41,7 @@ def test_register_is_throttled_by_ip(db):
         for i in range(6)
     ]
 
-    # 5/min: the first five go through, the 6th from the same IP is rejected
+    # limit is 5/min: the 6th from one IP is rejected
     assert 429 not in statuses[:5]
     assert statuses[-1] == 429
 
@@ -55,15 +55,13 @@ def test_login_is_throttled_by_ip(db):
         for _ in range(6)
     ]
 
-    # 5/min regardless of whether the credentials are valid - this is the
-    # brute-force guard
+    # the limit applies whether or not the credentials are valid
     assert statuses[-1] == 429
     assert statuses.count(429) == 1
 
 
 def test_spoofed_forwarded_for_does_not_escape_login_throttle(db):
-    # NUM_PROXIES=0 -> the throttle keys on REMOTE_ADDR, so a client rotating
-    # X-Forwarded-For can't land each attempt in a fresh bucket
+    # with NUM_PROXIES=0 the throttle keys on REMOTE_ADDR, so rotating X-Forwarded-For does not help
     client = APIClient()
     payload = {"email": "nobody@example.com", "password": "wrong"}
 
@@ -90,7 +88,6 @@ def test_429_carries_retry_after(db):
 
 
 def test_org_requests_share_one_budget(auth_client):
-    # all of an org's requests draw on a single counter
     with mock.patch(
         "accounts.throttling.OrganizationRateThrottle.get_rate", return_value="3/min"
     ):
@@ -102,7 +99,6 @@ def test_org_requests_share_one_budget(auth_client):
 
 
 def test_backend_error_fails_open(auth_client):
-    # a throttle backend outage must not take the API down
     with mock.patch(
         "rest_framework.throttling.SimpleRateThrottle.allow_request",
         side_effect=RuntimeError("redis down"),
