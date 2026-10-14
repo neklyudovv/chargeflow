@@ -41,7 +41,7 @@ def run_dunning():
         try:
             _dun_invoice(invoice_id)
         except (OperationalError, SoftTimeLimitExceeded):
-            # transient db trouble - let the task-level retry take the batch
+            # a db error is retried at task level, a soft time limit ends the batch
             raise
         except Exception:
             logger.exception("Dunning failed for invoice %s", invoice_id)

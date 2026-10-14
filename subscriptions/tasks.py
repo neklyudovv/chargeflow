@@ -46,7 +46,7 @@ def _run_batch(subscription_ids, handler, action):
         try:
             handler(subscription_id)
         except (OperationalError, SoftTimeLimitExceeded):
-            # transient db trouble - let the task-level retry take the batch
+            # a db error is retried at task level, a soft time limit ends the batch
             raise
         except Exception:
             logger.exception("Failed to %s subscription %s", action, subscription_id)
