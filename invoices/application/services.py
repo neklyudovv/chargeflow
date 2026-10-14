@@ -1,12 +1,5 @@
 from django.db import transaction
 
-from infrastructure.events import event_dispatcher
-from invoices.domain.events import (
-    InvoiceFailed,
-    InvoiceIssued,
-    InvoiceOverdue,
-    InvoicePaid,
-)
 from invoices.domain.models import Invoice, InvoiceLine, InvoiceStatus
 from subscriptions.domain.models import Subscription, SubscriptionStatus
 
@@ -23,7 +16,7 @@ class InvoiceService:
             return None
         # One invoice per subscription, billing period. get_or_create
         # + db unique constraint make this safe to call more than once for the
-        # same period (e.g. a retried task or a re-delivered event)
+        # same period (e.g. a retried task)
         invoice, created = Invoice.objects.get_or_create(
             subscription=subscription,
             period_start=subscription.current_period_start,
@@ -42,7 +35,9 @@ class InvoiceService:
             amount=subscription.plan.price,
         )
         invoice.transition_to(InvoiceStatus.ISSUED)
-        event_dispatcher.publish(InvoiceIssued(invoice_id=invoice.pk))
+        # local import: payments.application.services imports this module
+        from payments.tasks import charge_invoice
+        transaction.on_commit(lambda: charge_invoice.delay(invoice.pk))
         return invoice
 
     @staticmethod
@@ -52,7 +47,6 @@ class InvoiceService:
         if invoice.status == InvoiceStatus.PAID:
             return
         invoice.transition_to(InvoiceStatus.PAID)
-        event_dispatcher.publish(InvoicePaid(invoice_id=invoice.pk))
 
     @staticmethod
     @transaction.atomic
@@ -63,7 +57,6 @@ class InvoiceService:
         if invoice.status != InvoiceStatus.ISSUED:
             return
         invoice.transition_to(InvoiceStatus.FAILED)
-        event_dispatcher.publish(InvoiceFailed(invoice_id=invoice.pk))
 
     @staticmethod
     @transaction.atomic
@@ -87,16 +80,14 @@ class InvoiceService:
         if invoice.status != InvoiceStatus.FAILED:
             return
         invoice.transition_to(InvoiceStatus.OVERDUE)
-        event_dispatcher.publish(InvoiceOverdue(invoice_id=invoice.pk))
 
     @staticmethod
     @transaction.atomic
     def reissue_for_retry(invoice: Invoice) -> None:
         invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
-        # move a failed invoice back to ISSUED and reemit the event so
-        # the normal payment flow charges it again 
         # only FAILED invoices are reissued
         if invoice.status != InvoiceStatus.FAILED:
             return
         invoice.transition_to(InvoiceStatus.ISSUED)
-        event_dispatcher.publish(InvoiceIssued(invoice_id=invoice.pk))
+        from payments.tasks import charge_invoice
+        transaction.on_commit(lambda: charge_invoice.delay(invoice.pk))

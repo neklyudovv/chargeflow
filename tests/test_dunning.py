@@ -5,8 +5,8 @@ from django.utils import timezone
 from invoices.domain.models import Invoice, InvoiceStatus
 from invoices.tasks import MAX_DUNNING_ATTEMPTS, run_dunning
 from payments.domain.models import PaymentAttempt, PaymentStatus
+from subscriptions.application.services import SubscriptionService
 from subscriptions.domain.models import CancellationReason, SubscriptionStatus
-from subscriptions.tasks import mark_subscription_active_for_invoice
 
 
 def _force_status(obj, status):
@@ -109,7 +109,7 @@ def test_reactivation_blocked_by_other_unpaid_invoice(subscription, invoice):
         period_end=now + timedelta(days=61),
     )
 
-    mark_subscription_active_for_invoice(invoice.pk)
+    SubscriptionService.reactivate(subscription)
 
     subscription.refresh_from_db()
     assert subscription.status == SubscriptionStatus.OVERDUE

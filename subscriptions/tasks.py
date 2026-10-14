@@ -4,13 +4,8 @@ from celery import shared_task
 from django.db import OperationalError, transaction
 from django.utils import timezone
 
-from invoices.domain.models import Invoice
 from subscriptions.application.services import SubscriptionService
-from subscriptions.domain.models import (
-    CancellationReason,
-    Subscription,
-    SubscriptionStatus,
-)
+from subscriptions.domain.models import Subscription, SubscriptionStatus
 
 logger = getLogger(__name__)
 
@@ -19,23 +14,8 @@ RETRY = {"autoretry_for": (OperationalError,), "max_retries": 5, "retry_backoff"
 
 
 @shared_task(**RETRY)
-def mark_subscription_overdue_for_invoice(invoice_id):
-    invoice = Invoice.objects.select_related("subscription").get(pk=invoice_id)
-    SubscriptionService.mark_overdue(invoice.subscription)
-
-
-@shared_task(**RETRY)
-def mark_subscription_active_for_invoice(invoice_id):
-    invoice = Invoice.objects.select_related("subscription").get(pk=invoice_id)
-    SubscriptionService.reactivate(invoice.subscription)
-
-
-@shared_task(**RETRY)
 def run_renewals():
-    # Periodic renewal cycle: roll every ACTIVE subscription whose period has
-    # run out into the next one. renew() emits SubscriptionRenewed, which bills
-    # the new period through the normal event flow. OVERDUE subscriptions are
-    # left alone - dunning owns them until they pay or get closed.
+    # OVERDUE subscriptions are left alone: dunning owns them until they pay or get closed
     due_ids = list(
         Subscription.objects.filter(
             status=SubscriptionStatus.ACTIVE,
@@ -47,8 +27,7 @@ def run_renewals():
 
 @shared_task(**RETRY)
 def run_trial_activations():
-    # Periodic trial cycle: a trial that has run out becomes ACTIVE, which is
-    # what triggers its first invoice (billing skips TRIAL subscriptions).
+    # activation is what bills the first invoice: billing skips TRIAL subscriptions
     expired_ids = list(
         Subscription.objects.filter(
             status=SubscriptionStatus.TRIAL,
@@ -101,12 +80,3 @@ def _activate_if_still_expired(subscription_id):
         return
     SubscriptionService.activate(subscription)
 
-
-@shared_task(**RETRY)
-def close_subscription_for_non_payment(invoice_id):
-    invoice = Invoice.objects.select_related("subscription").get(pk=invoice_id)
-    subscription = invoice.subscription
-    # An invoice ran out of dunning retries; close its subscription for non-payment
-    if subscription.status == SubscriptionStatus.CANCELED:
-        return
-    SubscriptionService.cancel(subscription, reason=CancellationReason.NON_PAYMENT)

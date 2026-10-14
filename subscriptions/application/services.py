@@ -5,16 +5,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.models import Customer
-from infrastructure.events import event_dispatcher
+from invoices.application.services import InvoiceService
 from invoices.domain.models import InvoiceStatus
 from plans.models import Plan, PlanStatus
-from subscriptions.domain.events import (
-    SubscriptionActivated,
-    SubscriptionCanceled,
-    SubscriptionCreated,
-    SubscriptionOverdue,
-    SubscriptionRenewed,
-)
 from subscriptions.domain.models import (
     CancellationReason,
     InvalidStatusTransition,
@@ -65,7 +58,7 @@ class SubscriptionService:
             ),
         )
 
-        event_dispatcher.publish(SubscriptionCreated(subscription_id=subscription.pk))
+        InvoiceService.generate_for_subscription(subscription)
         return subscription
 
     @staticmethod
@@ -96,7 +89,7 @@ class SubscriptionService:
         subscription.current_period_end = SubscriptionService._compute_period_end(now, subscription.plan)
         subscription.save(update_fields=["current_period_start", "current_period_end", "updated_at"])
 
-        event_dispatcher.publish(SubscriptionActivated(subscription_id=subscription.pk))
+        InvoiceService.generate_for_subscription(subscription)
 
     @staticmethod
     @transaction.atomic
@@ -105,7 +98,6 @@ class SubscriptionService:
         if subscription.status != SubscriptionStatus.ACTIVE:
             return
         subscription.transition_to(SubscriptionStatus.OVERDUE)
-        event_dispatcher.publish(SubscriptionOverdue(subscription_id=subscription.pk))
 
     @staticmethod
     @transaction.atomic
@@ -134,7 +126,7 @@ class SubscriptionService:
         subscription.transition_to(SubscriptionStatus.CANCELED)
         subscription.canceled_reason = reason
         subscription.save(update_fields=["canceled_reason", "updated_at"])
-        event_dispatcher.publish(SubscriptionCanceled(subscription_id=subscription.pk))
+        InvoiceService.cancel_open_for_subscription(subscription)
 
     @staticmethod
     @transaction.atomic
@@ -154,4 +146,4 @@ class SubscriptionService:
         subscription.current_period_end = SubscriptionService._compute_period_end(now, subscription.plan)
         subscription.save(update_fields=["current_period_start", "current_period_end", "updated_at"])
 
-        event_dispatcher.publish(SubscriptionRenewed(subscription_id=subscription.pk))
+        InvoiceService.generate_for_subscription(subscription)

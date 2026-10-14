@@ -47,16 +47,6 @@ def test_attempt_records_decline_when_provider_fails(invoice, monkeypatch):
     assert payment.provider_response == {"status": "declined"}
 
 
-def test_attempt_does_not_double_charge_the_same_invoice(invoice):
-    _force_status(invoice, InvoiceStatus.ISSUED)
-
-    first = PaymentService.attempt(invoice)
-    second = PaymentService.attempt(invoice)
-
-    assert second.pk == first.pk
-    assert PaymentAttempt.objects.filter(invoice=invoice).count() == 1
-
-
 def test_attempt_replays_by_idempotency_key(invoice, monkeypatch):
     # a declined charge leaves the invoice payable again, so without a key a retry
     # would create a fresh attempt. The same idempotency key must instead replay

@@ -4,10 +4,10 @@ from logging import getLogger
 from django.conf import settings
 from django.db import transaction
 
-from infrastructure.events import event_dispatcher
+from invoices.application.services import InvoiceService
 from invoices.domain.models import PAYABLE_INVOICE_STATUSES, Invoice, InvoiceStatus
-from payments.domain.events import PaymentFailed, PaymentSucceeded, WebhookReceived
 from payments.domain.models import PaymentAttempt, PaymentStatus, WebhookEvent
+from subscriptions.application.services import SubscriptionService
 
 logger = getLogger(__name__)
 
@@ -54,23 +54,28 @@ class PaymentService:
         )
         success = MockPaymentProvider.charge(invoice.total, invoice.currency)
 
-        if success:
-            payment.status = PaymentStatus.SUCCESS
-            payment.provider_response = {"status": "ok"}
-            payment.save(update_fields=["status", "provider_response"])
-            event_dispatcher.publish(PaymentSucceeded(payment_attempt_id=payment.pk))
-        else:
-            payment.status = PaymentStatus.FAILED
-            payment.provider_response = {"status": "declined"}
-            payment.save(update_fields=["status", "provider_response"])
-            event_dispatcher.publish(PaymentFailed(payment_attempt_id=payment.pk))
-
+        PaymentService.settle(payment, success, {"status": "ok" if success else "declined"})
         return payment
 
     @staticmethod
     @transaction.atomic
+    def settle(payment: PaymentAttempt, success: bool, provider_response: dict) -> None:
+        # the one consumer of a charge result: attempt -> invoice -> subscription, one transaction
+        payment.status = PaymentStatus.SUCCESS if success else PaymentStatus.FAILED
+        payment.provider_response = provider_response
+        payment.save(update_fields=["status", "provider_response"])
+        invoice = payment.invoice
+        if success:
+            InvoiceService.mark_paid(invoice)
+            SubscriptionService.reactivate(invoice.subscription)
+        else:
+            InvoiceService.mark_failed(invoice)
+            SubscriptionService.mark_overdue(invoice.subscription)
+
+    @staticmethod
+    @transaction.atomic
     def charge_issued(invoice_id) -> PaymentAttempt | None:
-        # the InvoiceIssued handler: only the current issue is charged, decided under the lock
+        # only the current issue is charged, decided under the lock
         invoice = Invoice.objects.select_for_update().get(pk=invoice_id)
         if invoice.status != InvoiceStatus.ISSUED:
             return None
@@ -91,7 +96,6 @@ class PaymentService:
             event_type=event_type,
             payload=payload,
         )
-        event_dispatcher.publish(WebhookReceived(webhook_event_id=webhook.pk))
 
         payment_id = payload.get("payment_attempt_id")
         if not payment_id:
@@ -119,9 +123,7 @@ class PaymentService:
                     invoice.status in PAYABLE_INVOICE_STATUSES
                     and not invoice.payment_attempts.filter(status=PaymentStatus.SUCCESS).exists()
                 ):
-                    payment.status = PaymentStatus.SUCCESS
-                    payment.save(update_fields=["status", "provider_response"])
-                    event_dispatcher.publish(PaymentSucceeded(payment_attempt_id=payment.pk))
+                    PaymentService.settle(payment, True, payload)
                 else:
                     payment.needs_reconciliation = True
                     payment.save(update_fields=["provider_response", "needs_reconciliation"])
@@ -130,10 +132,7 @@ class PaymentService:
                         payment.pk, invoice.pk, invoice.status,
                     )
             elif status == "failed" and payment.status != PaymentStatus.FAILED:
-                payment.status = PaymentStatus.FAILED
-                payment.provider_response = payload
-                payment.save(update_fields=["status", "provider_response"])
-                event_dispatcher.publish(PaymentFailed(payment_attempt_id=payment.pk))
+                PaymentService.settle(payment, False, payload)
 
         webhook.processed = True
         webhook.save(update_fields=["processed"])
