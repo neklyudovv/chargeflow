@@ -164,4 +164,4 @@ def test_lost_charge_hand_off_surfaces_and_is_recovered(
 
 
 def test_the_in_process_event_bus_is_gone():
-    assert importlib.util.find_spec("infrastructure.events") is None
+    assert importlib.util.find_spec("infrastructure") is None

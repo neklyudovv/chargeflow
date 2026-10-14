@@ -230,10 +230,7 @@ class CustomerViewSet(
         org = get_request_organization(self.request)
         if org is None:
             raise ValidationError("No organization in scope.")
-        customer = serializer.save(organization=org)
-
-    def perform_update(self, serializer):
-        customer = serializer.save()
+        serializer.save(organization=org)
 
 
 class MemberViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
