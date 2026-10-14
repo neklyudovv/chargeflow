@@ -111,5 +111,5 @@ jobs:
           PYTHONPATH: .
 
       - name: Worker log
-        if: failure()
+        if: always()
         run: cat worker.log

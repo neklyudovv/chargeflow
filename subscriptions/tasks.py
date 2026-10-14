@@ -1,6 +1,7 @@
 from logging import getLogger
 
 from celery import shared_task
+from celery.exceptions import SoftTimeLimitExceeded
 from django.db import OperationalError, transaction
 from django.utils import timezone
 
@@ -44,7 +45,7 @@ def _run_batch(subscription_ids, handler, action):
     for subscription_id in subscription_ids:
         try:
             handler(subscription_id)
-        except OperationalError:
+        except (OperationalError, SoftTimeLimitExceeded):
             # transient db trouble - let the task-level retry take the batch
             raise
         except Exception:

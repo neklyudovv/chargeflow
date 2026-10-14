@@ -8,6 +8,7 @@ from invoices.application.services import InvoiceService
 from invoices.domain.models import PAYABLE_INVOICE_STATUSES, Invoice, InvoiceStatus
 from payments.domain.models import PaymentAttempt, PaymentStatus, WebhookEvent
 from subscriptions.application.services import SubscriptionService
+from subscriptions.domain.models import Subscription
 
 logger = getLogger(__name__)
 
@@ -28,6 +29,8 @@ class PaymentService:
             ).first()
             if replay:
                 return replay
+        # lock order is subscription -> invoice -> attempt everywhere
+        Subscription.objects.select_for_update().get(pk=invoice.subscription_id)
         invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
         if invoice.status not in PAYABLE_INVOICE_STATUSES:
             raise InvoiceNotPayable(
@@ -76,6 +79,8 @@ class PaymentService:
     @transaction.atomic
     def charge_issued(invoice_id) -> PaymentAttempt | None:
         # only the current issue is charged, decided under the lock
+        subscription_id = Invoice.objects.values_list("subscription_id", flat=True).get(pk=invoice_id)
+        Subscription.objects.select_for_update().get(pk=subscription_id)
         invoice = Invoice.objects.select_for_update().get(pk=invoice_id)
         if invoice.status != InvoiceStatus.ISSUED:
             return None
@@ -104,8 +109,10 @@ class PaymentService:
             return
 
         try:
-            # lock order is invoice -> attempt everywhere
-            invoice_id = PaymentAttempt.objects.values_list("invoice_id", flat=True).get(pk=payment_id)
+            invoice_id, subscription_id = PaymentAttempt.objects.values_list(
+                "invoice_id", "invoice__subscription_id"
+            ).get(pk=payment_id)
+            Subscription.objects.select_for_update().get(pk=subscription_id)
             invoice = Invoice.objects.select_for_update().get(pk=invoice_id)
             payment = PaymentAttempt.objects.select_for_update().get(pk=payment_id)
         except PaymentAttempt.DoesNotExist:

@@ -258,8 +258,6 @@ CELERY_TASK_ROUTES = {"payments.tasks.charge_invoice": {"queue": "io"}}
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_SOFT_TIME_LIMIT = 600
 CELERY_TASK_TIME_LIMIT = 900
-# above the hard time limit, or a running batch is redelivered to a second worker
-CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 3600}
 
 CELERY_BEAT_SCHEDULE = {
     "run-dunning-hourly": {
