@@ -12,7 +12,7 @@
 ![CI](https://github.com/neklyudovv/chargeflow/actions/workflows/ci.yml/badge.svg)
 ![coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)
 
-Chargeflow is a modular Django billing engine that manages the full subscription lifecycle - plans, subscriptions, invoices, and payments - driven by a domain-event bus with transactional integrity, whose handlers run as retriable Celery background tasks.
+Chargeflow is a modular Django billing engine that manages the full subscription lifecycle - plans, subscriptions, invoices, and payments - where state changes are direct service calls in one transaction, and Celery handles the payment call and the schedule.
 
 ## Table of Contents
 
@@ -38,19 +38,19 @@ Chargeflow is a modular Django billing engine that manages the full subscription
 
 ## Solution Overview
 
-Chargeflow models a real billing engine as a **modular monolith** - no microservices; domain apps coordinate through an in-process event bus, with events and scheduled work handed off to Celery background workers:
+Chargeflow models a real billing engine as a **modular monolith** - no microservices; domain apps call each other's services directly, and Celery runs the charge and the scheduled work:
 
 * Define **plans** with pricing and billing intervals (day / week / month / year)
 * Manage the **subscription lifecycle** through an explicit state machine
-* **Invoices are generated automatically** in response to domain events, not by an endpoint
+* **Invoices are generated automatically** when a subscription is created, activated or renewed, not by an endpoint
 * **Payments** are attempted by background workers and reconciled through idempotent webhooks
 * **Failed payments are retried automatically** by a scheduled Celery beat dunning job
-* **Coordinated by an event bus** - apps react to domain events instead of calling each other directly; handlers are dispatched as retriable, idempotent Celery tasks after the transaction commits
+* **Synchronous core** - a state change and its consequences are direct service calls in one transaction under row locks; only the charge is handed to a Celery worker, after the commit
 * **Multi-tenant** by design - every request is scoped to an organization
 
 ## Architecture Highlights
 
-The project follows a clean, layered structure with a strict separation of concerns. Each domain app owns its own vertical slice - domain, application, and API layers - which keeps business rules independent of the framework and easy to test. The apps stay decoupled by communicating through a shared **event bus** rather than importing one another's services, so a change in one domain rarely ripples into the others.
+The project follows a clean, layered structure with a strict separation of concerns. Each domain app owns its own vertical slice - domain, application, and API layers - which keeps business rules independent of the framework and easy to test. Services call each other in one direction (subscriptions -> invoices, payments -> invoices and subscriptions), so the dependencies stay visible.
 
 ### 1. Domain apps
 
@@ -60,32 +60,32 @@ The billing model is split across five Django apps.
 * `subscriptions` and `invoices` each drive their own state machine — one for the subscription lifecycle, one for invoice states.
 * `payments` handles payment attempts and incoming provider webhooks.
 
-### 2. Event Bus (`infrastructure/events.py`)
+### 2. Synchronous core
 
-The core of the design: a domain-event bus (`EventBus`) that keeps the apps decoupled. Instead of one app reaching into another, each publishes domain events and reacts to the ones it cares about. Events are dispatched via `transaction.on_commit()`, so handlers run **only after** the database transaction commits - never on a rolled-back state. Handlers are registered per app in `AppConfig.ready()`.
+State changes are direct service calls inside one `@transaction.atomic` block, each row re-read under `select_for_update()`. Creating, activating or renewing a subscription generates its invoice in the same transaction; a charge result is applied by `PaymentService.settle` (attempt -> invoice -> subscription) and a cancellation closes the open invoices.
 
-The bus stays the router; each handler is executed as a **Celery task** (see below), so the event -> task boundary lives in the registration, not in the business code.
-
-Key flows:
-
-* `SubscriptionCreated` / `SubscriptionActivated` -> an `Invoice` is generated automatically
-* `PaymentSucceeded` -> invoice marked paid; `PaymentFailed` -> invoice failed -> subscription moves to `OVERDUE`
+Every fact has one consumer. An in-process event bus gave the core extra hops and extra places to lose a change, not decoupling.
 
 ### 3. Background Jobs (Celery + Redis)
 
-Event handlers are dispatched as **Celery tasks** rather than run inline, so slow work is decoupled from the request and survives a crash. Tasks retry transient errors with backoff, and every handler is **idempotent** - a unique-per-period constraint on invoices, state guards on settlement, and a no-duplicate guard on payment attempts, so a retry or a re-delivered event never double-issues or double-charges.
+Celery is for external I/O and the schedule. `charge_invoice` runs on the `io` queue and is handed to the worker with `transaction.on_commit` when an invoice is issued, so it never sees a rolled-back state. The beat cycles run on the `batch` queue and call the same services:
 
-A **Celery beat** schedule runs a **dunning** cycle that re-issues failed invoices and re-triggers their payment, up to a bounded retry cap - the engine's automatic retry loop for failed billing.
+* `run_dunning` re-issues failed invoices up to a retry cap, then marks them overdue and cancels the subscription
+* `run_renewals` rolls expired subscriptions into the next period
+* `run_trial_activations` activates trials that have ended
+* `reconcile_stuck` re-hands the charge of an issued invoice that has no attempt after ten minutes, in case the hand-off was lost
 
-Redis is the broker, `celery_worker` executes tasks, and `celery_beat` schedules them. With no broker configured (local dev, CI), tasks run in-process, so neither Redis nor a worker is needed to run or test the project.
+Tasks retry transient database errors with backoff and are idempotent: a unique-per-period constraint on invoices, state guards under the lock, and a no-duplicate guard on payment attempts.
+
+Redis is the broker, `celery_worker` consumes the `io` and `batch` queues, and `celery_beat` schedules the cycles. With no broker configured (local dev, CI), tasks run in-process, so neither Redis nor a worker is needed to run or test the project.
 
 ### 4. Domain Layer (`domain/`)
 
-Entities, state-machine transition tables, and domain events. Illegal state changes are impossible by construction: every transition goes through `model.transition_to(new_state)`, which raises `InvalidStatusTransition` on an illegal move.
+Entities and state-machine transition tables. Illegal state changes are impossible by construction: every transition goes through `model.transition_to(new_state)`, which raises `InvalidStatusTransition` on an illegal move.
 
 ### 5. Application Layer (`application/services.py`)
 
-Orchestration and use cases. Services wrap their work in `@transaction.atomic` and publish domain events - keeping the API layer thin and the business rules in one place.
+Orchestration and use cases. Services wrap their work in `@transaction.atomic` and call the services of the apps they depend on - keeping the API layer thin and the business rules in one place.
 
 ### 6. API Layer (`api/`)
 
@@ -147,7 +147,7 @@ The endpoints below are grouped by domain.
 * `POST /api/subscriptions/{id}/cancel/` - Cancel
 
 ### Invoices (`/api/invoices`)
-* `GET /api/invoices/` - List invoices (generated automatically by events)
+* `GET /api/invoices/` - List invoices (generated automatically by the subscription lifecycle)
 * `GET /api/invoices/{id}/` - Retrieve an invoice
 
 ### Payments (`/api/payments`)
