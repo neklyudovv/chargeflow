@@ -20,7 +20,7 @@ def _set(subscription, status, period_end):
 
 @pytest.fixture
 def member(user, organization):
-    # token-auth org resolution queries memberships, not Organization.owner.
+    # token-auth org resolution reads memberships, not Organization.owner
     OrganizationMembership.objects.create(
         organization=organization,
         user=user,
@@ -51,7 +51,7 @@ def test_create_subscription_returns_201_active(auth_client, customer, plan):
     )
 
     assert response.status_code == 201
-    assert response.data["status"] == "active"  # plan fixture has no trial
+    assert response.data["status"] == "active"
 
 
 def test_create_subscription_autogenerates_invoice(
@@ -104,8 +104,7 @@ def test_renew_endpoint_renews_an_expired_subscription(auth_client, subscription
 
 
 def test_activate_endpoint_rejects_an_overdue_subscription(auth_client, subscription):
-    # activating resets the billing period - on an OVERDUE subscription that
-    # would clear the arrears without anyone paying them
+    # activating an OVERDUE subscription would reset its period and clear the arrears
     period_end = timezone.now() - timedelta(hours=1)
     _set(subscription, SubscriptionStatus.OVERDUE, period_end)
 
@@ -141,7 +140,7 @@ def test_create_on_archived_plan_returns_400(auth_client, customer, plan):
 
 
 def test_delete_plan_with_subscriptions_returns_400(auth_client, plan, subscription):
-    # subscription fixture already references plan; PROTECT must surface as 400
+    # the plan is protected by the subscription fixture: PROTECT must surface as 400
     response = auth_client.delete(f"/api/plans/{plan.pk}/")
 
     assert response.status_code == 400

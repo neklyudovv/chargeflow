@@ -9,17 +9,17 @@ from django.utils import timezone
 
 from invoices.application.services import InvoiceService
 from invoices.domain.models import Invoice, InvoiceStatus
-from invoices.tasks import generate_invoice_for_subscription, run_dunning
+from invoices.tasks import run_dunning
 from payments.application.services import MockPaymentProvider, PaymentService
 from payments.domain.models import PaymentAttempt, PaymentStatus
-from payments.tasks import attempt_payment_for_invoice
+from payments.tasks import charge_invoice
 from subscriptions.application.services import SubscriptionService
 from subscriptions.domain.models import (
     InvalidStatusTransition,
     Subscription,
     SubscriptionStatus,
 )
-from subscriptions.tasks import mark_subscription_active_for_invoice, run_renewals
+from subscriptions.tasks import run_renewals
 
 
 def _force(obj, status):
@@ -110,7 +110,7 @@ def test_reactivation_racing_a_cancel_does_not_resurrect_the_subscription(
 
     monkeypatch.setattr(Subscription, "transition_to", racing_transition)
     try:
-        mark_subscription_active_for_invoice(invoice.pk)
+        SubscriptionService.reactivate(subscription)
     except InvalidStatusTransition:
         # refusing the overwrite is the point, raising is one way to do it
         pass
@@ -135,7 +135,7 @@ def test_no_invoice_is_generated_for_a_non_active_subscription(
     _force(subscription, status)
 
     with django_capture_on_commit_callbacks(execute=True):
-        generate_invoice_for_subscription(subscription.pk)
+        InvoiceService.generate_for_subscription(subscription)
 
     assert not Invoice.objects.filter(subscription=subscription).exists()
 
@@ -199,43 +199,33 @@ def test_database_rejects_a_second_success_attempt_per_invoice(invoice):
         )
 
 
-def test_redelivered_issued_event_does_not_charge_failed_or_overdue_invoice(
+def test_charge_task_skips_a_failed_or_overdue_invoice(
     subscription, invoice, monkeypatch, django_capture_on_commit_callbacks
 ):
     _force(subscription, SubscriptionStatus.ACTIVE)
     _force(invoice, InvoiceStatus.ISSUED)
     _decline(monkeypatch)
 
-    # the decline fails the invoice through the event chain
+    # the decline fails the invoice
     with django_capture_on_commit_callbacks(execute=True):
-        attempt_payment_for_invoice(invoice.pk)
+        charge_invoice(invoice.pk)
     invoice.refresh_from_db()
     assert invoice.status == InvoiceStatus.FAILED
 
-    attempt_payment_for_invoice(invoice.pk)
+    charge_invoice(invoice.pk)
     assert PaymentAttempt.objects.filter(invoice=invoice).count() == 1
 
     _force(invoice, InvoiceStatus.OVERDUE)
-    attempt_payment_for_invoice(invoice.pk)
+    charge_invoice(invoice.pk)
     assert PaymentAttempt.objects.filter(invoice=invoice).count() == 1
 
 
-# the second delivery arrives before the first one's PaymentFailed hop has run
-def test_concurrent_redelivery_before_the_failure_hop_charges_once(
-    subscription, invoice, monkeypatch, django_capture_on_commit_callbacks
-):
+# an issued invoice is charged once per issue
+def test_charge_task_does_not_charge_the_same_issue_twice(subscription, invoice):
     _force(subscription, SubscriptionStatus.ACTIVE)
     invoice.transition_to(InvoiceStatus.ISSUED)
-    _decline(monkeypatch)
+    PaymentAttempt.objects.create(invoice=invoice, amount=invoice.total, status=PaymentStatus.FAILED)
 
-    # the PaymentFailed callback is captured, not executed: the invoice stays ISSUED
-    with django_capture_on_commit_callbacks(execute=False):
-        attempt_payment_for_invoice(invoice.pk)
-    invoice.refresh_from_db()
-    assert invoice.status == InvoiceStatus.ISSUED
-    assert PaymentAttempt.objects.filter(invoice=invoice).count() == 1
-
-    with django_capture_on_commit_callbacks(execute=True):
-        attempt_payment_for_invoice(invoice.pk)
+    charge_invoice(invoice.pk)
 
     assert PaymentAttempt.objects.filter(invoice=invoice).count() == 1

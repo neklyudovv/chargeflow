@@ -52,7 +52,7 @@ services:
   celery_worker:
     <<: *app
     entrypoint: []
-    command: ["celery", "-A", "config", "worker", "--loglevel=info"]
+    command: ["celery", "-A", "config", "worker", "-Q", "io,batch", "--loglevel=info"]
 
   celery_beat:
     <<: *app
