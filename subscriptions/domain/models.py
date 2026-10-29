@@ -78,7 +78,17 @@ class Subscription(models.Model):
 
     @transaction.atomic
     def save(self, *args, **kwargs):
-        self.lock_parents(self.customer_id, self.plan_id)
+        persisted_parents = None
+        if self.pk:
+            # existing rows lock before parents to match lifecycle services
+            persisted_parents = (
+                Subscription.objects.select_for_update()
+                .filter(pk=self.pk)
+                .values_list("customer_id", "plan_id")
+                .first()
+            )
+        if persisted_parents != (self.customer_id, self.plan_id):
+            self.lock_parents(self.customer_id, self.plan_id)
         self.clean()
         super().save(*args, **kwargs)
 
