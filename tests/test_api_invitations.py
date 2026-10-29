@@ -7,8 +7,7 @@ ACCEPT_URL = "/api/accounts/invitations/accept/"
 
 
 def test_accept_invitation_matches_email_case_insensitively(organization):
-    # the invite was addressed with different casing than the user registered
-    # with; accepting it must still match on email regardless of case.
+    # the invite was addressed with different casing than the user registered with
     invitation = Invitation.create_for_organization(
         organization, "Casey@Example.COM", OrganizationMembership.Role.MEMBER
     )

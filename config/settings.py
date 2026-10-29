@@ -235,13 +235,6 @@ LOGGING = {
         "handlers": ["console"],
         "level": "INFO",
     },
-    "loggers": {
-        "infrastructure": {
-            "handlers": ["console"],
-            "level": "INFO",
-            "propagate": False,
-        },
-    },
 }
 
 # Celery / background jobs
@@ -258,6 +251,13 @@ CELERY_TIMEZONE = "UTC"
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
+# charges must not queue behind hourly batches
+CELERY_TASK_DEFAULT_QUEUE = "batch"
+CELERY_TASK_ROUTES = {"payments.tasks.charge_invoice": {"queue": "io"}}
+# with acks_late, prefetching would hold tasks hostage to a slow batch
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_SOFT_TIME_LIMIT = 600
+CELERY_TASK_TIME_LIMIT = 900
 
 CELERY_BEAT_SCHEDULE = {
     "run-dunning-hourly": {
@@ -272,6 +272,10 @@ CELERY_BEAT_SCHEDULE = {
     "run-trial-activations-hourly": {
         "task": "subscriptions.tasks.run_trial_activations",
         "schedule": crontab(minute=30),
+    },
+    "reconcile-stuck": {
+        "task": "invoices.tasks.reconcile_stuck",
+        "schedule": crontab(minute="5,20,35,50"),
     },
 }
 

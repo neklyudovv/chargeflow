@@ -8,5 +8,5 @@ RETRY = {"autoretry_for": (OperationalError,), "max_retries": 5, "retry_backoff"
 
 
 @shared_task(**RETRY)
-def attempt_payment_for_invoice(invoice_id):
+def charge_invoice(invoice_id):
     PaymentService.charge_issued(invoice_id)
