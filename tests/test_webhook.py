@@ -78,3 +78,24 @@ def test_webhook_for_unknown_payment_is_marked_processed(db):
 
     webhook = WebhookEvent.objects.get(event_type="payment.updated")
     assert webhook.processed is True
+
+
+@pytest.mark.parametrize('sign_with_settings', [True, False])
+def test_http_webhook_uses_the_configured_secret(db, settings, monkeypatch, sign_with_settings):
+    import hashlib
+    import hmac
+    import json
+
+    from rest_framework.test import APIClient
+
+    settings.WEBHOOK_SECRET = 'configured-webhook-secret'
+    monkeypatch.setenv('WEBHOOK_SECRET', 'changed-after-startup')
+    body = json.dumps({'event_type': 'ping', 'payload': {}}).encode()
+    secret = settings.WEBHOOK_SECRET if sign_with_settings else 'changed-after-startup'
+    signature = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    response = APIClient().post(
+        '/api/payments/webhook/', body, content_type='application/json',
+        HTTP_X_WEBHOOK_SIGNATURE=signature,
+    )
+    assert response.status_code == (200 if sign_with_settings else 400)
+    assert WebhookEvent.objects.count() == (1 if sign_with_settings else 0)

@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 
 from celery.schedules import crontab
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -21,8 +22,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv(BASE_DIR / '.env')
 
-SECRET_KEY = os.environ['DJANGO_SECRET_KEY']
+def required(name, secret=False):
+    value = os.environ.get(name, '').strip()
+    if not value or (secret and (value.lower().startswith(('your-', 'change-me', 'changeme', 'replace-me')))):
+        raise ImproperlyConfigured(f'{name} must be configured with a non-placeholder value')
+    return value
 
+
+SECRET_KEY = required('DJANGO_SECRET_KEY', secret=True)
+WEBHOOK_SECRET = required('WEBHOOK_SECRET', secret=True)
 DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = [
@@ -87,24 +95,16 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-if os.environ.get('POSTGRES_HOST'):
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ['POSTGRES_DB'],
-            'USER': os.environ['POSTGRES_USER'],
-            'PASSWORD': os.environ['POSTGRES_PASSWORD'],
-            'HOST': os.environ['POSTGRES_HOST'],
-            'PORT': os.environ.get('POSTGRES_PORT', '5432'),
-        }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': required('POSTGRES_DB'),
+        'USER': required('POSTGRES_USER'),
+        'PASSWORD': required('POSTGRES_PASSWORD', secret=True),
+        'HOST': required('POSTGRES_HOST'),
+        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
     }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+}
 
 
 # Password validation
@@ -184,6 +184,8 @@ REST_FRAMEWORK = {
 # without REDIS_THROTTLE_URL (local runserver / CI) we fall back to per-process
 # memory, which still works for a single instance.
 REDIS_THROTTLE_URL = os.environ.get("REDIS_THROTTLE_URL", "")
+if not DEBUG and not REDIS_THROTTLE_URL:
+    raise ImproperlyConfigured('REDIS_THROTTLE_URL is required outside DEBUG')
 if REDIS_THROTTLE_URL:
     CACHES = {
         "default": {
@@ -237,12 +239,13 @@ LOGGING = {
     },
 }
 
-# Celery / background jobs
-# In production, docker-compose sets a separate worker/beat consume the queue.
-# Without a broker, tasks run inline
-# so local `runserver` and CI need no Redis and no worker process.
+# inline tasks are an explicit development/test choice
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "")
-CELERY_TASK_ALWAYS_EAGER = not CELERY_BROKER_URL
+CELERY_TASK_ALWAYS_EAGER = os.environ.get("CELERY_TASK_ALWAYS_EAGER", "False") == "True"
+if CELERY_TASK_ALWAYS_EAGER and not DEBUG:
+    raise ImproperlyConfigured('CELERY_TASK_ALWAYS_EAGER requires DEBUG=True')
+if not CELERY_TASK_ALWAYS_EAGER and not CELERY_BROKER_URL:
+    raise ImproperlyConfigured('CELERY_BROKER_URL is required unless eager mode is explicitly enabled')
 CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
@@ -280,5 +283,5 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 # Mock payment provider: share of charges that are randomly declined (0.0-1.0).
-# Defaults to 0 so local runs and tests are deterministic; docker sets 0.5
+# defaults to zero for deterministic development
 PAYMENT_FAILURE_RATE = float(os.environ.get("PAYMENT_FAILURE_RATE", "0"))

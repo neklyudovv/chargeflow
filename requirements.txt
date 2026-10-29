@@ -1,12 +1,8 @@
-Django==6.0.3
-djangorestframework==3.16.1
+Django==6.0.9
+djangorestframework==3.18.3
 django-cors-headers==4.9.0
 drf-spectacular==0.30.0
-python-dotenv==1.2.1
+python-dotenv==1.2.2
 psycopg[binary]==3.2.9
 gunicorn==25.3.0
 celery[redis]==5.5.3
-
-pytest==8.3.4
-pytest-django==4.9.0
-pytest-cov==6.0.0

@@ -9,3 +9,11 @@ frontend/node_modules
 *.md
 .env
 .venv
+
+tests
+requirements-dev.txt
+.claude
+.agents
+.coverage
+.pytest_cache
+run

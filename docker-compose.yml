@@ -2,62 +2,86 @@ x-app: &app
   build: .
   env_file:
     - .env
-  environment: &app-env
-    - POSTGRES_HOST=db
-    - POSTGRES_PORT=${DB_PORT}
-    - POSTGRES_DB=${DB_NAME}
-    - POSTGRES_USER=${DB_USER}
-    - POSTGRES_PASSWORD=${DB_PASS}
-    - CELERY_BROKER_URL=${CELERY_BROKER_URL}
-    - REDIS_THROTTLE_URL=${REDIS_THROTTLE_URL}
-    - PAYMENT_FAILURE_RATE=0.5
+  environment:
+    POSTGRES_HOST: db
+    POSTGRES_PORT: 5432
   depends_on:
     db:
       condition: service_healthy
     redis:
       condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
   restart: unless-stopped
 
 services:
   db:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASS}
-      - POSTGRES_DB=${DB_NAME}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   redis:
     image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  # backend owns migrations/collectstatic via the image entrypoint, then gunicorn
+  migrate:
+    <<: *app
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "manage.py", "migrate", "--noinput"]
+
   backend:
     <<: *app
+    command: ["sh", "-c", "python manage.py collectstatic --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"]
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "docker/healthcheck.py", "backend"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
-  # Worker/beat skips the migrate+collectstatic entrypoint and
-  # runs Celery directly, sharing same image and settings
   celery_worker:
     <<: *app
-    entrypoint: []
-    command: ["celery", "-A", "config", "worker", "-Q", "io,batch", "--loglevel=info"]
+    command: ["celery", "-A", "config", "worker", "-Q", "io,batch", "--hostname=worker@%h", "--loglevel=info"]
+    healthcheck:
+      test: ["CMD", "python", "docker/healthcheck.py", "worker"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
 
   celery_beat:
     <<: *app
-    entrypoint: []
-    command: ["celery", "-A", "config", "beat", "--loglevel=info"]
+    command: ["celery", "-A", "config", "beat", "--scheduler=config.scheduler:HealthcheckedScheduler", "--schedule=/app/run/celerybeat-schedule", "--loglevel=info"]
+    healthcheck:
+      test: ["CMD", "python", "docker/healthcheck.py", "beat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 volumes:
   postgres_data:

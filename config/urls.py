@@ -23,8 +23,10 @@ from drf_spectacular.views import (
 )
 
 from accounts.api.views import LoginView, RegisterView
+from config.health import health
 
 urlpatterns = [
+    path("health/", health),
     path("admin/", admin.site.urls),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
