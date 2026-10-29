@@ -52,14 +52,14 @@ def test_api_key_cannot_act_as_a_human(project, method, path, data):
     ("/api/payments/attempts/", {"invoice_id": 1}),
 ])
 def test_member_cannot_mutate_project(project, path, data):
-    member = User.objects.create_user(email="member@example.com", password="test-password")
+    member = User.objects.create_user(username="member@example.com", email="member@example.com", password="test-password")
     OrganizationMembership.objects.create(organization=project[0], user=member, role="member")
     assert client_for(member).post(path, data, format="json").status_code == 403
 
 
 def test_member_cannot_revoke_key(project):
     key, _ = ApiKey.create_for_organization(project[0])
-    member = User.objects.create_user(email="member@example.com", password="test-password")
+    member = User.objects.create_user(username="member@example.com", email="member@example.com", password="test-password")
     OrganizationMembership.objects.create(organization=project[0], user=member, role="member")
     assert client_for(member).delete(f"/api/accounts/keys/{key.pk}/").status_code == 403
     key.refresh_from_db()
