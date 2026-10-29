@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+import pytest
 from django.utils import timezone
 
 from invoices.domain.models import Invoice, InvoiceStatus
@@ -53,25 +54,13 @@ def test_dunning_reactivates_overdue_subscription(
     assert subscription.status == SubscriptionStatus.ACTIVE
 
 
-def test_dunning_gives_up_after_retry_cap(invoice, django_capture_on_commit_callbacks):
-    _force_status(invoice, InvoiceStatus.FAILED)
-    for _ in range(MAX_DUNNING_ATTEMPTS):
-        PaymentAttempt.objects.create(
-            invoice=invoice, amount=invoice.total, status=PaymentStatus.FAILED
-        )
-
-    with django_capture_on_commit_callbacks(execute=True):
-        run_dunning()
-
-    invoice.refresh_from_db()
-    assert invoice.status == InvoiceStatus.OVERDUE
-    assert PaymentAttempt.objects.filter(invoice=invoice).count() == MAX_DUNNING_ATTEMPTS
-
-
+@pytest.mark.parametrize(
+    "initial_status", [SubscriptionStatus.TRIAL, SubscriptionStatus.OVERDUE]
+)
 def test_dunning_exhaustion_closes_subscription_for_non_payment(
-    subscription, invoice, django_capture_on_commit_callbacks
+    subscription, invoice, django_capture_on_commit_callbacks, initial_status
 ):
-    _force_status(subscription, SubscriptionStatus.OVERDUE)
+    _force_status(subscription, initial_status)
     _force_status(invoice, InvoiceStatus.FAILED)
     for _ in range(MAX_DUNNING_ATTEMPTS):
         PaymentAttempt.objects.create(
@@ -84,6 +73,7 @@ def test_dunning_exhaustion_closes_subscription_for_non_payment(
     invoice.refresh_from_db()
     subscription.refresh_from_db()
     assert invoice.status == InvoiceStatus.OVERDUE
+    assert PaymentAttempt.objects.filter(invoice=invoice).count() == MAX_DUNNING_ATTEMPTS
     assert subscription.status == SubscriptionStatus.CANCELED
     assert subscription.canceled_reason == CancellationReason.NON_PAYMENT
 

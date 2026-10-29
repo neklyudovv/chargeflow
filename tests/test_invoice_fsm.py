@@ -1,16 +1,32 @@
 import pytest
 
-from invoices.domain.models import (
-    INVOICE_TRANSITIONS,
-    InvoiceStatus,
-)
+from invoices.domain.models import InvoiceStatus
 from subscriptions.domain.models import InvalidStatusTransition
 
 ALL_STATUSES = set(InvoiceStatus.values)
 
+EXPECTED_TRANSITIONS = {
+    InvoiceStatus.DRAFT: {InvoiceStatus.ISSUED, InvoiceStatus.CANCELED},
+    InvoiceStatus.ISSUED: {
+        InvoiceStatus.PAID,
+        InvoiceStatus.FAILED,
+        InvoiceStatus.OVERDUE,
+        InvoiceStatus.CANCELED,
+    },
+    InvoiceStatus.FAILED: {
+        InvoiceStatus.ISSUED,
+        InvoiceStatus.PAID,
+        InvoiceStatus.OVERDUE,
+        InvoiceStatus.CANCELED,
+    },
+    InvoiceStatus.OVERDUE: {InvoiceStatus.PAID, InvoiceStatus.CANCELED},
+    InvoiceStatus.PAID: set(),
+    InvoiceStatus.CANCELED: set(),
+}
+
 LEGAL_EDGES = [
     (src, dst)
-    for src, targets in INVOICE_TRANSITIONS.items()
+    for src, targets in EXPECTED_TRANSITIONS.items()
     for dst in targets
 ]
 
@@ -18,10 +34,8 @@ ILLEGAL_EDGES = [
     (src, dst)
     for src in ALL_STATUSES
     for dst in ALL_STATUSES
-    if src != dst and dst not in INVOICE_TRANSITIONS.get(src, set())
+    if src != dst and dst not in EXPECTED_TRANSITIONS.get(src, set())
 ]
-
-TERMINAL_STATUSES = [s for s, targets in INVOICE_TRANSITIONS.items() if not targets]
 
 
 def _force_status(invoice, status):
@@ -67,21 +81,3 @@ def test_paid_sets_paid_at(invoice):
 
     invoice.refresh_from_db()
     assert invoice.paid_at is not None
-
-
-def test_failed_can_retry_to_issued(invoice):
-    _force_status(invoice, InvoiceStatus.FAILED)
-
-    invoice.transition_to(InvoiceStatus.ISSUED)
-
-    invoice.refresh_from_db()
-    assert invoice.status == InvoiceStatus.ISSUED
-
-
-@pytest.mark.parametrize("terminal", TERMINAL_STATUSES)
-def test_terminal_statuses_have_no_exits(invoice, terminal):
-    _force_status(invoice, terminal)
-
-    for dst in ALL_STATUSES - {terminal}:
-        with pytest.raises(InvalidStatusTransition):
-            invoice.transition_to(dst)
