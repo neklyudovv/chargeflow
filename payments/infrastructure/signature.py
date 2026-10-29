@@ -1,6 +1,6 @@
 import hashlib
 import hmac
-import os
+from django.conf import settings
 
 
 class WebhookSignatureError(Exception):
@@ -8,7 +8,7 @@ class WebhookSignatureError(Exception):
 
 
 def verify_webhook_signature(payload_bytes: bytes, signature: str) -> None:
-    secret = os.environ.get("WEBHOOK_SECRET", "")
+    secret = settings.WEBHOOK_SECRET
     if not secret:
         raise WebhookSignatureError("WEBHOOK_SECRET is not configured")
 

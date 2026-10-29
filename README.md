@@ -1,8 +1,8 @@
 # chargeflow
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
-![Django](https://img.shields.io/badge/Django-6.0-092E20?logo=django&logoColor=white)
-![DRF](https://img.shields.io/badge/DRF-3.16-A30000?logo=django&logoColor=white)
+![Django](https://img.shields.io/badge/Django-6.0.9-092E20?logo=django&logoColor=white)
+![DRF](https://img.shields.io/badge/DRF-3.18-A30000?logo=django&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-compose-2496ED?logo=docker&logoColor=white)
 ![Celery](https://img.shields.io/badge/Celery-5.5-37814A?logo=celery&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
@@ -28,7 +28,6 @@ Chargeflow is a modular Django billing engine that manages the full subscription
 * **Django** - web framework and ORM
 * **Django REST Framework** - REST API layer (ViewSets, serializers)
 * **PostgreSQL** - database
-* **SQLite** - zero-config database for local development
 * **Docker** - containerized deployment via docker-compose
 * **Celery + Redis** - background task processing and scheduled billing runs (dunning)
 * **Github Actions** - CI
@@ -77,7 +76,7 @@ Celery is for external I/O and the schedule. `charge_invoice` runs on the `io` q
 
 Tasks retry transient database errors with backoff and are idempotent: a unique-per-period constraint on invoices, state guards under the lock, and a no-duplicate guard on payment attempts.
 
-Redis is the broker, `celery_worker` consumes the `io` and `batch` queues, and `celery_beat` schedules the cycles. With no broker configured (local dev, CI), tasks run in-process, so neither Redis nor a worker is needed to run or test the project.
+Redis is the broker, `celery_worker` consumes the `io` and `batch` queues, and `celery_beat` schedules the cycles. Inline tasks are available only when explicitly enabled in DEBUG mode; normal deployments require a broker and worker.
 
 ### 4. Domain Layer (`domain/`)
 
@@ -157,37 +156,56 @@ The endpoints below are grouped by domain.
 
 ## Installation and Launch
 
-1. Clone the project:
-   ```bash
-   git clone https://github.com/neklyudovv/chargeflow.git
-   cd chargeflow
-   ```
+Python 3.12, PostgreSQL 16 and Redis 7 are supported. PostgreSQL is required in every environment; there is no SQLite fallback.
 
-2. Set up the `.env` file based on `.env.example`
+```bash
+git clone https://github.com/neklyudovv/chargeflow.git
+cd chargeflow
+cp .env.example .env
+python -c "import secrets; print(secrets.token_hex(32))"
+```
 
-3. Run the project with Docker:
-   ```bash
-   docker-compose up --build
-   ```
+Generate a separate value for each of `DJANGO_SECRET_KEY`, `WEBHOOK_SECRET` and `POSTGRES_PASSWORD` and fill them in `.env`. Empty secrets and known placeholders are rejected. Set `DJANGO_ALLOWED_HOSTS` for the deployment. `PAYMENT_FAILURE_RATE` controls the mock provider; it defaults to zero and Compose does not override it.
 
-4. API will be available at:
-   ```
-   http://localhost:8000/
-   ```
+```bash
+docker compose up --build --wait
+```
 
-> **Local development (SQLite, no Docker)**
-> ```bash
-> python manage.py migrate
-> python manage.py runserver
-> ```
->
-> **Run tests:**
-> ```bash
-> pytest
-> ```
->
-> **CI/CD:**
-> Github Actions runs the full test suite against PostgreSQL on every push and pull request to `main`, and fails the build if coverage drops below 70%. See `.github/workflows/ci.yml`.
+The API and Swagger documentation are at `http://localhost:8000/api/docs/`. The migration service must finish successfully before backend, worker or beat starts. Health checks exercise the database and broker, plus HTTP, worker ping or the beat scheduler heartbeat. Run one beat instance. The image runs as an unprivileged user and contains only runtime dependencies.
+
+For later schema updates, stop the application processes and rerun the one-shot service before restarting them:
+
+```bash
+docker compose stop backend celery_worker celery_beat
+docker compose build
+docker compose run --rm migrate
+docker compose up -d --build --wait
+```
+
+### Local Python development and tests
+
+Install dependencies in a virtual environment with `pip install -r requirements-dev.txt`. Start infrastructure with `docker compose up -d db redis`. For commands outside Docker, override the container hostnames:
+
+```bash
+export POSTGRES_HOST=localhost
+export CELERY_BROKER_URL=redis://localhost:6379/0
+export REDIS_THROTTLE_URL=redis://localhost:6379/1
+python manage.py migrate
+python manage.py runserver
+```
+
+Secrets and other database values are read from `.env`. PostgreSQL must allow creating a test database. Inline Celery execution requires both `DJANGO_DEBUG=True` and the explicit `CELERY_TASK_ALWAYS_EAGER=True`; it is never selected just because a broker URL is missing.
+
+```bash
+DJANGO_DEBUG=True CELERY_TASK_ALWAYS_EAGER=True pytest
+pip-audit -r requirements.txt
+```
+
+CI runs PostgreSQL tests with the coverage gate, the real-worker billing chain, dependency auditing and a complete Compose smoke test. Docker exposes PostgreSQL and Redis only on the loopback interface for local commands.
+
+### Existing SQLite data
+
+The old `db.sqlite3` file is not deleted or converted automatically. If it contains data you need, keep a backup and use the old revision and its environment to export application data with Django `dumpdata --natural-foreign --natural-primary --exclude contenttypes --exclude auth.permission`. Store the export securely; it contains user information and authentication material. With the new PostgreSQL database migrated, import it using `loaddata` and verify counts and application access before retiring the old database. Do not run both databases as active billing systems.
 
 ## TODO
 
