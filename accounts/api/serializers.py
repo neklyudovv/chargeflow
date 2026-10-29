@@ -57,11 +57,12 @@ class LoginSerializer(serializers.Serializer):
 class ApiKeySerializer(serializers.ModelSerializer):
     class Meta:
         model = ApiKey
-        fields = ["id", "name", "prefix", "created_at", "expires_at", "revoked"]
-        read_only_fields = ["id", "prefix", "created_at", "expires_at", "revoked"]
+        fields = ["id", "name", "prefix", "created_at", "expires_at", "revoked", "scope"]
+        read_only_fields = ["id", "prefix", "created_at", "expires_at", "revoked", "scope"]
 
 
 class ApiKeyCreateSerializer(serializers.Serializer):
+    scope = serializers.ChoiceField(choices=ApiKey.Scope.choices, default=ApiKey.Scope.READ_WRITE)
     name = serializers.CharField(max_length=100, default="Default")
     expires_at = serializers.DateTimeField(required=False, allow_null=True)
 

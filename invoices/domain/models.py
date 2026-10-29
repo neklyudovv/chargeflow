@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -32,6 +33,8 @@ INVOICE_TRANSITIONS: dict[str, set[str]] = {
 
 
 class Invoice(models.Model):
+    organization = models.ForeignKey("accounts.Organization", on_delete=models.CASCADE)
+
     subscription = models.ForeignKey(
         Subscription, on_delete=models.CASCADE, related_name="invoices"
     )
@@ -58,6 +61,20 @@ class Invoice(models.Model):
             ),
         ]
 
+    def clean(self):
+        if self.subscription_id is None:
+            return
+        organization_id = self.subscription.organization_id
+        if self.organization_id is not None and self.organization_id != organization_id:
+            raise ValidationError("Organization must match the parent record.")
+        if self.pk and Invoice.objects.filter(pk=self.pk).exclude(organization_id=organization_id).exists():
+            raise ValidationError("Cannot move a billing record to another organization.")
+        self.organization_id = organization_id
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"Invoice #{self.pk} - {self.subscription.customer} ({self.status})"
 
@@ -82,6 +99,8 @@ class Invoice(models.Model):
 
 
 class InvoiceLine(models.Model):
+    organization = models.ForeignKey("accounts.Organization", on_delete=models.CASCADE)
+
     invoice = models.ForeignKey(
         Invoice, on_delete=models.CASCADE, related_name="lines"
     )
@@ -90,6 +109,20 @@ class InvoiceLine(models.Model):
 
     class Meta:
         app_label = "invoices"
+
+    def clean(self):
+        if self.invoice_id is None:
+            return
+        organization_id = self.invoice.organization_id
+        if self.organization_id is not None and self.organization_id != organization_id:
+            raise ValidationError("Organization must match the parent record.")
+        if self.pk and InvoiceLine.objects.filter(pk=self.pk).exclude(organization_id=organization_id).exists():
+            raise ValidationError("Cannot move a billing record to another organization.")
+        self.organization_id = organization_id
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.description} - {self.amount}"

@@ -40,6 +40,8 @@ class SubscriptionService:
     @staticmethod
     @transaction.atomic
     def create(customer: Customer, plan: Plan) -> Subscription:
+        if customer.organization_id != plan.organization_id:
+            raise ValueError("Customer and plan must belong to the same organization.")
         if plan.status != PlanStatus.ACTIVE:
             raise ValueError(f"Cannot subscribe to a plan with status '{plan.status}'")
 

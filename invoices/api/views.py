@@ -19,5 +19,5 @@ class InvoiceViewSet(
         return (
             Invoice.objects.select_related("subscription")
             .prefetch_related("lines")
-            .filter(subscription__customer__organization=org)
+            .filter(organization=org)
         )

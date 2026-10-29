@@ -215,3 +215,29 @@ The old `db.sqlite3` file is not deleted or converted automatically. If it conta
 * [ ] Invoice PDF generation
 * [ ] Email notifications
 * [ ] Reporting / analytics app
+
+## Project access and payment request isolation
+
+User tokens act through organization memberships. OWNER and ADMIN may change
+project data and create/revoke API keys; MEMBER has read-only access. Users with
+multiple memberships select a project with `X-Organization-Id`.
+
+API keys represent their own project, never its owner. Key creation accepts
+`scope: "read"` or `scope: "read_write"` (the default, including existing keys).
+Read keys cannot mutate project data. All keys are denied access to user profile,
+organization administration, members, invitations and API-key management; use a
+user token for those endpoints. A key cannot select another project with a header.
+
+`Idempotency-Key` on payment creation is unique within a project and bound to one
+invoice. Replaying it for that invoice returns the original attempt; using it for
+a different invoice returns HTTP 409. Different projects may use the same key.
+An issued invoice that already has an attempt also rejects a new key with 409;
+retry failed payments through the existing reissue flow.
+
+The upgrade backfills organization IDs on subscriptions, invoices, invoice lines,
+payment attempts and resolvable webhook events. A historical subscription whose
+customer and plan belong to different projects stops migration with a clear error;
+correct that inconsistent data before retrying. Unknown-payment webhook events
+are preserved with a null organization, including newly acknowledged unknown
+notifications; they cannot change billing state. Other billing records require an
+organization matching their parent. Back up the database before migration.

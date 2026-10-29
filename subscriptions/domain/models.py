@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -30,6 +31,8 @@ class InvalidStatusTransition(Exception):
 
 
 class Subscription(models.Model):
+    organization = models.ForeignKey("accounts.Organization", on_delete=models.CASCADE)
+
     customer = models.ForeignKey(
         Customer, on_delete=models.CASCADE, related_name="subscriptions"
     )
@@ -52,6 +55,22 @@ class Subscription(models.Model):
 
     class Meta:
         app_label = "subscriptions"
+
+    def clean(self):
+        if self.customer_id is None or self.plan_id is None:
+            return
+        organization_id = self.customer.organization_id
+        if self.plan.organization_id != organization_id:
+            raise ValidationError("Customer and plan must belong to the same organization.")
+        if self.organization_id is not None and self.organization_id != organization_id:
+            raise ValidationError("Organization must match the parent record.")
+        if self.pk and Subscription.objects.filter(pk=self.pk).exclude(organization_id=organization_id).exists():
+            raise ValidationError("Cannot move a billing record to another organization.")
+        self.organization_id = organization_id
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.customer} - {self.plan} ({self.status})"

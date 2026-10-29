@@ -7,7 +7,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.authtoken.models import Token
 from rest_framework.exceptions import AuthenticationFailed
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -25,7 +25,7 @@ from accounts.api.serializers import (
     RegisterSerializer,
 )
 from accounts.models import ApiKey, Customer, Invitation, Organization, OrganizationMembership, User
-from accounts.permissions import IsOrgAdmin
+from accounts.permissions import IsHuman, IsOrgAdmin, ProjectAccess
 from accounts.request_context import get_request_organization
 from accounts.throttling import AuthRateThrottle
 
@@ -98,6 +98,8 @@ class LoginView(APIView):
 
 
 class MeView(APIView):
+    permission_classes = [IsHuman]
+
     """GET /api/accounts/me/ - user, resolved organization scope, and role."""
 
     @extend_schema(
@@ -125,7 +127,7 @@ class MeView(APIView):
 
 class OrganizationViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):
     serializer_class = OrganizationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsHuman]
 
     def get_queryset(self):
         return Organization.objects.filter(
@@ -172,7 +174,7 @@ class ApiKeyViewSet(
     viewsets.GenericViewSet,
 ):
     serializer_class = ApiKeySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsHuman, ProjectAccess]
 
     def get_queryset(self):
         org = get_request_organization(self.request)
@@ -193,6 +195,7 @@ class ApiKeyViewSet(
             org,
             name=serializer.validated_data["name"],
             expires_at=serializer.validated_data.get("expires_at"),
+            scope=serializer.validated_data["scope"],
         )
         return Response(
             {
@@ -218,7 +221,7 @@ class CustomerViewSet(
     viewsets.GenericViewSet,
 ):
     serializer_class = CustomerSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ProjectAccess]
 
     def get_queryset(self):
         org = get_request_organization(self.request)
@@ -235,7 +238,7 @@ class CustomerViewSet(
 
 class MemberViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     serializer_class = OrganizationMembershipSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsHuman]
 
     def get_queryset(self):
         org = get_request_organization(self.request)
@@ -249,7 +252,7 @@ class InvitationViewSet(
     mixins.CreateModelMixin,
     viewsets.GenericViewSet,
 ):
-    permission_classes = [IsAuthenticated, IsOrgAdmin]
+    permission_classes = [IsHuman, IsOrgAdmin]
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -288,7 +291,7 @@ class InvitationViewSet(
 
 
 class AcceptInvitationView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsHuman]
 
     @extend_schema(
         request=AcceptInvitationSerializer,

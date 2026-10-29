@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permissions import ProjectAccess
 from accounts.request_context import get_request_organization
 from invoices.domain.models import Invoice
 from payments.api.serializers import (
@@ -13,7 +14,7 @@ from payments.api.serializers import (
     PaymentAttemptSerializer,
     WebhookSerializer,
 )
-from payments.application.services import InvoiceNotPayable, PaymentService
+from payments.application.services import IdempotencyConflict, InvoiceNotPayable, PaymentService
 from payments.domain.models import PaymentAttempt
 from payments.infrastructure.signature import WebhookSignatureError, verify_webhook_signature
 
@@ -25,13 +26,14 @@ class PaymentAttemptViewSet(
     viewsets.GenericViewSet,
 ):
     serializer_class = PaymentAttemptSerializer
+    permission_classes = [ProjectAccess]
 
     def get_queryset(self):
         org = get_request_organization(self.request)
         if org is None:
             return PaymentAttempt.objects.none()
         return PaymentAttempt.objects.select_related("invoice").filter(
-            invoice__subscription__customer__organization=org
+            organization=org
         )
 
     def create(self, request, *args, **kwargs):
@@ -46,13 +48,15 @@ class PaymentAttemptViewSet(
         invoice = get_object_or_404(
             Invoice,
             pk=serializer.validated_data["invoice_id"],
-            subscription__customer__organization=org,
+            organization=org,
         )
         try:
             payment = PaymentService.attempt(
                 invoice,
                 idempotency_key=request.headers.get("Idempotency-Key"),
             )
+        except IdempotencyConflict as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         except InvoiceNotPayable as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(PaymentAttemptSerializer(payment).data, status=status.HTTP_201_CREATED)

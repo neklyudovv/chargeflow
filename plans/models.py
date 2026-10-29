@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -26,6 +27,15 @@ class Plan(models.Model):
     trial_period_days = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        if self.pk and Plan.objects.filter(pk=self.pk).exclude(organization_id=self.organization_id).exists():
+            if self.subscriptions.exists():
+                raise ValidationError("Cannot move a billing parent to another organization.")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.organization})"
