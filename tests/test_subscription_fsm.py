@@ -2,7 +2,6 @@ import pytest
 
 from subscriptions.application.services import SubscriptionService
 from subscriptions.domain.models import (
-    SUBSCRIPTION_TRANSITIONS,
     CancellationReason,
     InvalidStatusTransition,
     SubscriptionStatus,
@@ -10,9 +9,25 @@ from subscriptions.domain.models import (
 
 ALL_STATUSES = set(SubscriptionStatus.values)
 
+EXPECTED_TRANSITIONS = {
+    SubscriptionStatus.TRIAL: {
+        SubscriptionStatus.ACTIVE,
+        SubscriptionStatus.CANCELED,
+    },
+    SubscriptionStatus.ACTIVE: {
+        SubscriptionStatus.OVERDUE,
+        SubscriptionStatus.CANCELED,
+    },
+    SubscriptionStatus.OVERDUE: {
+        SubscriptionStatus.ACTIVE,
+        SubscriptionStatus.CANCELED,
+    },
+    SubscriptionStatus.CANCELED: set(),
+}
+
 LEGAL_EDGES = [
     (src, dst)
-    for src, targets in SUBSCRIPTION_TRANSITIONS.items()
+    for src, targets in EXPECTED_TRANSITIONS.items()
     for dst in targets
 ]
 
@@ -20,7 +35,7 @@ ILLEGAL_EDGES = [
     (src, dst)
     for src in ALL_STATUSES
     for dst in ALL_STATUSES
-    if src != dst and dst not in SUBSCRIPTION_TRANSITIONS.get(src, set())
+    if src != dst and dst not in EXPECTED_TRANSITIONS.get(src, set())
 ]
 
 
@@ -59,15 +74,6 @@ def test_cancel_sets_canceled_at(subscription):
     assert subscription.canceled_at is not None
 
 
-def test_canceled_is_terminal(subscription):
-    _force_status(subscription, SubscriptionStatus.CANCELED)
-
-    assert SUBSCRIPTION_TRANSITIONS[SubscriptionStatus.CANCELED] == set()
-    for dst in ALL_STATUSES - {SubscriptionStatus.CANCELED}:
-        with pytest.raises(InvalidStatusTransition):
-            subscription.transition_to(dst)
-
-
 def test_cancel_defaults_to_voluntary_reason(subscription):
     SubscriptionService.cancel(subscription)
 
@@ -81,12 +87,3 @@ def test_cancel_records_non_payment_reason(subscription):
 
     subscription.refresh_from_db()
     assert subscription.canceled_reason == CancellationReason.NON_PAYMENT
-
-
-def test_overdue_can_recover_to_active(subscription):
-    _force_status(subscription, SubscriptionStatus.OVERDUE)
-
-    subscription.transition_to(SubscriptionStatus.ACTIVE)
-
-    subscription.refresh_from_db()
-    assert subscription.status == SubscriptionStatus.ACTIVE

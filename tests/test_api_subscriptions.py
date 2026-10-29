@@ -43,18 +43,7 @@ def test_list_requires_authentication(db):
     assert response.status_code == 401
 
 
-def test_create_subscription_returns_201_active(auth_client, customer, plan):
-    response = auth_client.post(
-        SUBSCRIPTIONS_URL,
-        {"customer_id": customer.pk, "plan_id": plan.pk},
-        format="json",
-    )
-
-    assert response.status_code == 201
-    assert response.data["status"] == "active"
-
-
-def test_create_subscription_autogenerates_invoice(
+def test_create_subscription_returns_active_with_invoice(
     auth_client, customer, plan, django_capture_on_commit_callbacks
 ):
     with django_capture_on_commit_callbacks(execute=True):
@@ -65,6 +54,7 @@ def test_create_subscription_autogenerates_invoice(
         )
 
     assert response.status_code == 201
+    assert response.data["status"] == "active"
     assert Invoice.objects.filter(subscription_id=response.data["id"]).exists()
 
 

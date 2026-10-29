@@ -1,4 +1,5 @@
-from django.db import models
+from django.core.exceptions import ValidationError
+from django.db import connection, models, transaction
 from django.utils import timezone
 
 from accounts.models import Customer
@@ -30,6 +31,8 @@ class InvalidStatusTransition(Exception):
 
 
 class Subscription(models.Model):
+    organization = models.ForeignKey("accounts.Organization", on_delete=models.CASCADE)
+
     customer = models.ForeignKey(
         Customer, on_delete=models.CASCADE, related_name="subscriptions"
     )
@@ -52,6 +55,42 @@ class Subscription(models.Model):
 
     class Meta:
         app_label = "subscriptions"
+
+    def clean(self):
+        if self.customer_id is None or self.plan_id is None:
+            return
+        organization_id = Customer.objects.values_list("organization_id", flat=True).get(pk=self.customer_id)
+        if Plan.objects.values_list("organization_id", flat=True).get(pk=self.plan_id) != organization_id:
+            raise ValidationError("Customer and plan must belong to the same organization.")
+        if self.organization_id is not None and self.organization_id != organization_id:
+            raise ValidationError("Organization must match the parent record.")
+        if self.pk and Subscription.objects.filter(pk=self.pk).exclude(organization_id=organization_id).exists():
+            raise ValidationError("Cannot move a billing record to another organization.")
+        self.organization_id = organization_id
+
+    @staticmethod
+    def lock_parents(customer_id, plan_id):
+        # shared locks permit sibling subscriptions but exclude parent organization moves
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM accounts_customer WHERE id = %s FOR SHARE", [customer_id])
+            cursor.execute("SELECT id FROM plans_plan WHERE id = %s FOR SHARE", [plan_id])
+        return Customer.objects.get(pk=customer_id), Plan.objects.get(pk=plan_id)
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        persisted_parents = None
+        if self.pk:
+            # existing rows lock before parents to match lifecycle services
+            persisted_parents = (
+                Subscription.objects.select_for_update()
+                .filter(pk=self.pk)
+                .values_list("customer_id", "plan_id")
+                .first()
+            )
+        if persisted_parents != (self.customer_id, self.plan_id):
+            self.lock_parents(self.customer_id, self.plan_id)
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.customer} - {self.plan} ({self.status})"

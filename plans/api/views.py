@@ -2,12 +2,14 @@ from django.db.models import ProtectedError
 from rest_framework import viewsets
 from rest_framework.exceptions import ValidationError
 
+from accounts.permissions import ProjectAccess
 from accounts.request_context import get_request_organization
 from plans.api.serializers import PlanSerializer
 from plans.models import Plan
 
 
 class PlanViewSet(viewsets.ModelViewSet):
+    permission_classes = [ProjectAccess]
     serializer_class = PlanSerializer
 
     def get_queryset(self):

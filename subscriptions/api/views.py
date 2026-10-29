@@ -5,6 +5,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from accounts.models import Customer
+from accounts.permissions import ProjectAccess
 from accounts.request_context import get_request_organization
 from plans.models import Plan
 from subscriptions.api.serializers import SubscriptionCreateSerializer, SubscriptionSerializer
@@ -28,13 +29,14 @@ class SubscriptionViewSet(
     viewsets.GenericViewSet,
 ):
     serializer_class = SubscriptionSerializer
+    permission_classes = [ProjectAccess]
 
     def get_queryset(self):
         org = get_request_organization(self.request)
         if org is None:
             return Subscription.objects.none()
         return Subscription.objects.select_related("customer", "plan").filter(
-            customer__organization=org
+            organization=org
         )
 
     def create(self, request, *args, **kwargs):

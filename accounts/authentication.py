@@ -5,11 +5,17 @@ from rest_framework.exceptions import AuthenticationFailed
 from accounts.models import ApiKey
 
 
+class ProjectPrincipal:
+    is_authenticated = True
+    is_anonymous = False
+
+    def __init__(self, api_key):
+        self.organization_id = api_key.organization_id
+        self.scope = api_key.scope
+
+
 class ApiKeyAuthentication(BaseAuthentication):
-    """
-    Service-to-service: Authorization: Bearer cf_<secret>
-    Sets request.organization and authenticates as the owning User (for permissions).
-    """
+    """authenticate a service key without impersonating a user"""
 
     def authenticate(self, request):
         auth_header = request.headers.get("Authorization", "")
@@ -20,12 +26,12 @@ class ApiKeyAuthentication(BaseAuthentication):
         if not raw_key:
             return None
 
-        organization = ApiKey.authenticate(raw_key)
-        if organization is None:
+        api_key = ApiKey.authenticate(raw_key)
+        if api_key is None:
             raise AuthenticationFailed("Invalid or expired API key")
 
-        request.organization = organization
-        return (organization.owner, None)
+        request.organization = api_key.organization
+        return (ProjectPrincipal(api_key), api_key)
 
 
 class ApiKeyAuthenticationScheme(OpenApiAuthenticationExtension):

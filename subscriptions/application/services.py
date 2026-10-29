@@ -40,6 +40,9 @@ class SubscriptionService:
     @staticmethod
     @transaction.atomic
     def create(customer: Customer, plan: Plan) -> Subscription:
+        customer, plan = Subscription.lock_parents(customer.pk, plan.pk)
+        if customer.organization_id != plan.organization_id:
+            raise ValueError("Customer and plan must belong to the same organization.")
         if plan.status != PlanStatus.ACTIVE:
             raise ValueError(f"Cannot subscribe to a plan with status '{plan.status}'")
 

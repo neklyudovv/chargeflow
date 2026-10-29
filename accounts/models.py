@@ -2,7 +2,8 @@ import secrets
 from datetime import timedelta
 
 from django.contrib.auth.models import AbstractUser
-from django.db import models
+from django.core.exceptions import ValidationError
+from django.db import models, transaction
 from django.utils import timezone
 
 from accounts.tokens import KEY_PREFIX, KEY_PREFIX_LENGTH, generate_raw_key, hash_key
@@ -115,11 +116,29 @@ class Customer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def clean(self):
+        if self.pk and Customer.objects.filter(pk=self.pk).exclude(organization_id=self.organization_id).exists():
+            if self.subscriptions.exists():
+                raise ValidationError("Cannot move a billing parent to another organization.")
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        if self.pk:
+            Customer.objects.select_for_update(no_key=True).filter(pk=self.pk).first()
+        self.clean()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.name} ({self.email})"
 
 
 class ApiKey(models.Model):
+    class Scope(models.TextChoices):
+        READ = "read", "Read"
+        READ_WRITE = "read_write", "Read and write"
+
+    scope = models.CharField(max_length=20, choices=Scope.choices, default=Scope.READ_WRITE)
+
     organization = models.ForeignKey(
         Organization, on_delete=models.CASCADE, related_name="api_keys"
     )
@@ -139,6 +158,7 @@ class ApiKey(models.Model):
         organization: "Organization",
         name: str = "Default",
         expires_at=None,
+        scope=Scope.READ_WRITE,
     ) -> tuple["ApiKey", str]:
         raw_key = generate_raw_key()
         instance = cls.objects.create(
@@ -147,16 +167,17 @@ class ApiKey(models.Model):
             prefix=raw_key[:KEY_PREFIX_LENGTH],
             key_hash=hash_key(raw_key),
             expires_at=expires_at,
+            scope=scope,
         )
         return instance, raw_key
 
     @classmethod
-    def authenticate(cls, raw_key: str) -> "Organization | None":
+    def authenticate(cls, raw_key: str) -> "ApiKey | None":
         if not raw_key.startswith(KEY_PREFIX):
             return None
         prefix = raw_key[:KEY_PREFIX_LENGTH]
         try:
-            api_key = cls.objects.select_related("organization", "organization__owner").get(
+            api_key = cls.objects.select_related("organization").get(
                 prefix=prefix,
                 key_hash=hash_key(raw_key),
                 revoked=False,
@@ -165,4 +186,4 @@ class ApiKey(models.Model):
             return None
         if api_key.expires_at and api_key.expires_at < timezone.now():
             return None
-        return api_key.organization
+        return api_key
