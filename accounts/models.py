@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from accounts.tokens import KEY_PREFIX, KEY_PREFIX_LENGTH, generate_raw_key, hash_key
@@ -121,7 +121,10 @@ class Customer(models.Model):
             if self.subscriptions.exists():
                 raise ValidationError("Cannot move a billing parent to another organization.")
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
+        if self.pk:
+            Customer.objects.select_for_update(no_key=True).filter(pk=self.pk).first()
         self.clean()
         super().save(*args, **kwargs)
 

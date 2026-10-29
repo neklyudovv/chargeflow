@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import connection, models, transaction
 from django.utils import timezone
 
 from accounts.models import Customer
@@ -59,8 +59,8 @@ class Subscription(models.Model):
     def clean(self):
         if self.customer_id is None or self.plan_id is None:
             return
-        organization_id = self.customer.organization_id
-        if self.plan.organization_id != organization_id:
+        organization_id = Customer.objects.values_list("organization_id", flat=True).get(pk=self.customer_id)
+        if Plan.objects.values_list("organization_id", flat=True).get(pk=self.plan_id) != organization_id:
             raise ValidationError("Customer and plan must belong to the same organization.")
         if self.organization_id is not None and self.organization_id != organization_id:
             raise ValidationError("Organization must match the parent record.")
@@ -68,7 +68,17 @@ class Subscription(models.Model):
             raise ValidationError("Cannot move a billing record to another organization.")
         self.organization_id = organization_id
 
+    @staticmethod
+    def lock_parents(customer_id, plan_id):
+        # shared locks permit sibling subscriptions but exclude parent organization moves
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM accounts_customer WHERE id = %s FOR SHARE", [customer_id])
+            cursor.execute("SELECT id FROM plans_plan WHERE id = %s FOR SHARE", [plan_id])
+        return Customer.objects.get(pk=customer_id), Plan.objects.get(pk=plan_id)
+
+    @transaction.atomic
     def save(self, *args, **kwargs):
+        self.lock_parents(self.customer_id, self.plan_id)
         self.clean()
         super().save(*args, **kwargs)
 

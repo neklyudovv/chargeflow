@@ -64,7 +64,7 @@ class Invoice(models.Model):
     def clean(self):
         if self.subscription_id is None:
             return
-        organization_id = self.subscription.organization_id
+        organization_id = Subscription.objects.values_list("organization_id", flat=True).get(pk=self.subscription_id)
         if self.organization_id is not None and self.organization_id != organization_id:
             raise ValidationError("Organization must match the parent record.")
         if self.pk and Invoice.objects.filter(pk=self.pk).exclude(organization_id=organization_id).exists():
@@ -113,7 +113,7 @@ class InvoiceLine(models.Model):
     def clean(self):
         if self.invoice_id is None:
             return
-        organization_id = self.invoice.organization_id
+        organization_id = Invoice.objects.values_list("organization_id", flat=True).get(pk=self.invoice_id)
         if self.organization_id is not None and self.organization_id != organization_id:
             raise ValidationError("Organization must match the parent record.")
         if self.pk and InvoiceLine.objects.filter(pk=self.pk).exclude(organization_id=organization_id).exists():

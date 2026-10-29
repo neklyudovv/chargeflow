@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 
 
 class PlanStatus(models.TextChoices):
@@ -33,7 +33,10 @@ class Plan(models.Model):
             if self.subscriptions.exists():
                 raise ValidationError("Cannot move a billing parent to another organization.")
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
+        if self.pk:
+            Plan.objects.select_for_update(no_key=True).filter(pk=self.pk).first()
         self.clean()
         super().save(*args, **kwargs)
 
