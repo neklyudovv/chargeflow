@@ -93,10 +93,7 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("provider_idempotency_key", models.CharField(max_length=255, unique=True)),
-                ("amount", models.DecimalField(decimal_places=2, max_digits=10)),
-                ("currency", models.CharField(max_length=3)),
-                ("provider_customer_id", models.CharField(blank=True, default="", max_length=255)),
-                ("provider_payment_method_id", models.CharField(blank=True, default="", max_length=255)),
+                ("request_fingerprint", models.CharField(max_length=64)),
                 ("success", models.BooleanField()),
                 ("provider_charge_id", models.CharField(max_length=255, unique=True)),
                 ("provider_response", models.JSONField(default=dict)),
@@ -137,6 +134,14 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 fields=("provider", "provider_idempotency_key"),
                 name="unique_provider_payment_key",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="paymentattempt",
+            constraint=models.UniqueConstraint(
+                condition=~models.Q(provider_charge_id=""),
+                fields=("provider", "provider_charge_id"),
+                name="unique_provider_charge",
             ),
         ),
         migrations.AddConstraint(
