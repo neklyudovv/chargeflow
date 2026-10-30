@@ -72,7 +72,7 @@ Celery is for external I/O and the schedule. `charge_invoice` runs on the `io` q
 * `run_dunning` re-issues failed invoices up to a retry cap, then marks them overdue and cancels the subscription
 * `run_renewals` rolls expired subscriptions into the next period
 * `run_trial_activations` activates trials that have ended
-* `reconcile_stuck` re-hands the charge of an issued invoice that has no attempt after ten minutes, in case the hand-off was lost
+* `reconcile_stuck` resumes abandoned PENDING attempts and re-hands issued invoices with no attempt after ten minutes
 
 Tasks retry transient database errors with backoff and are idempotent: a unique-per-period constraint on invoices, state guards under the lock, and separate client and provider idempotency keys on payment attempts.
 
@@ -97,7 +97,7 @@ Provider webhooks use the same settlement path. The request is JSON with this sh
 }
 ```
 
-Send `X-Webhook-Signature: t=<unix>,v1=<hex>` where the hex value is HMAC-SHA256 over `<unix>.<raw request bytes>` using `WEBHOOK_SECRET`. Timestamps more than 300 seconds in the past or future, malformed signatures, non-JSON requests, unknown providers, invalid attempt IDs and statuses are rejected. Events are deduplicated by provider and provider event ID; the first committed payload wins. A well-formed event for an unknown payment is acknowledged and retained without changing billing state.
+Send `X-Webhook-Signature: t=<unix>,v1=<hex>` where the hex value is HMAC-SHA256 over `<unix>.<raw request bytes>` using `WEBHOOK_SECRET`. Timestamps more than 300 seconds in the past or future, malformed signatures, non-JSON requests, unknown providers, invalid attempt IDs and statuses are rejected. Events are deduplicated by provider and provider event ID; the first committed payload wins. A well-formed event for an unknown payment is acknowledged and retained without changing billing state. Retry deliveries with the same `provider_event_id` and a fresh signed timestamp; body-only signatures are no longer accepted.
 
 Redis is the broker, `celery_worker` consumes the `io` and `batch` queues, and `celery_beat` schedules the cycles. Inline tasks are available only when explicitly enabled in DEBUG mode; normal deployments require a broker and worker.
 
