@@ -9,6 +9,8 @@ from payments.domain.models import PaymentAttempt, PaymentStatus
 from subscriptions.application.services import SubscriptionService
 from subscriptions.domain.models import CancellationReason, SubscriptionStatus
 
+pytestmark = pytest.mark.django_db(transaction=True)
+
 
 def _force_status(obj, status):
     obj.status = status

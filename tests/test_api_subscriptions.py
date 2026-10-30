@@ -10,6 +10,7 @@ from invoices.domain.models import Invoice
 from subscriptions.domain.models import SubscriptionStatus
 
 SUBSCRIPTIONS_URL = "/api/subscriptions/"
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
 def _set(subscription, status, period_end):

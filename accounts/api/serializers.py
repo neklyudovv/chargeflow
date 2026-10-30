@@ -76,7 +76,15 @@ class ApiKeyCreateSerializer(serializers.Serializer):
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
-        fields = ["id", "email", "name", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "email",
+            "name",
+            "provider_customer_id",
+            "provider_payment_method_id",
+            "created_at",
+            "updated_at",
+        ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
 

@@ -14,7 +14,7 @@ from plans.models import Plan
 from subscriptions.application.services import SubscriptionService
 from subscriptions.domain.models import Subscription
 
-pytestmark = pytest.mark.django_db
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
 @pytest.fixture

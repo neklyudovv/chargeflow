@@ -1,1 +1,1 @@
-from payments.domain.models import PaymentAttempt, PaymentStatus, WebhookEvent  # noqa: F401
+from payments.domain.models import MockChargeReceipt, PaymentAttempt, PaymentStatus, WebhookEvent  # noqa: F401

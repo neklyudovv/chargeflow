@@ -10,7 +10,8 @@ from django.utils import timezone
 from invoices.application.services import InvoiceService
 from invoices.domain.models import Invoice, InvoiceStatus
 from invoices.tasks import run_dunning
-from payments.application.services import MockPaymentProvider, PaymentService
+from payments.application.gateway import ChargeResult
+from payments.application.services import PaymentService, get_payment_gateway
 from payments.domain.models import PaymentAttempt, PaymentStatus
 from payments.tasks import charge_invoice
 from subscriptions.application.services import SubscriptionService
@@ -21,6 +22,8 @@ from subscriptions.domain.models import (
 )
 from subscriptions.tasks import run_renewals
 
+pytestmark = pytest.mark.django_db(transaction=True)
+
 
 def _force(obj, status):
     obj.status = status
@@ -28,16 +31,32 @@ def _force(obj, status):
 
 
 def _decline(monkeypatch):
-    monkeypatch.setattr(MockPaymentProvider, "charge", staticmethod(lambda a, c: False))
+    monkeypatch.setattr(
+        get_payment_gateway("mock"),
+        "charge",
+        lambda request: ChargeResult(False, "charge_declined", {"status": "declined"}),
+    )
 
 
 def _accept(monkeypatch):
-    monkeypatch.setattr(MockPaymentProvider, "charge", staticmethod(lambda a, c: True))
+    monkeypatch.setattr(
+        get_payment_gateway("mock"),
+        "charge",
+        lambda request: ChargeResult(True, "charge_accepted", {"status": "ok"}),
+    )
 
 
 def _webhook_success(attempt):
+    attempt.refresh_from_db()
     PaymentService.handle_webhook(
-        "payment.updated", {"payment_attempt_id": attempt.pk, "status": "success"}
+        "payment.updated",
+        {
+            "payment_attempt_id": attempt.pk,
+            "status": "success",
+            "provider_charge_id": attempt.provider_charge_id,
+        },
+        provider="mock",
+        provider_event_id=f"evt-success-{attempt.pk}",
     )
 
 

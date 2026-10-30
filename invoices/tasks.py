@@ -9,7 +9,8 @@ from django.utils import timezone
 
 from invoices.application.services import InvoiceService
 from invoices.domain.models import Invoice, InvoiceStatus
-from payments.domain.models import PaymentStatus
+from payments.application.services import PaymentService
+from payments.domain.models import PaymentAttempt, PaymentStatus
 from payments.tasks import charge_invoice
 from subscriptions.application.services import SubscriptionService
 from subscriptions.domain.models import (
@@ -69,6 +70,21 @@ def _dun_invoice(invoice_id):
 
 @shared_task(**RETRY)
 def reconcile_stuck():
+    pending_ids = list(
+        PaymentAttempt.objects.filter(
+            status=PaymentStatus.PENDING,
+            needs_reconciliation=False,
+            attempted_at__lte=timezone.now() - STUCK_CHARGE_AFTER,
+        ).values_list("pk", flat=True)
+    )
+    for payment_id in pending_ids:
+        try:
+            PaymentService.recover_pending(payment_id)
+        except (OperationalError, SoftTimeLimitExceeded):
+            raise
+        except Exception:
+            logger.exception("Reconcile failed for payment attempt %s", payment_id)
+
     # a hand-off lost between commit and the broker leaves an ISSUED invoice nobody charges
     stuck_ids = list(
         Invoice.objects.filter(
