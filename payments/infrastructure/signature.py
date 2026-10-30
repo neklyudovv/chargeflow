@@ -18,7 +18,13 @@ def verify_webhook_signature(payload_bytes: bytes, signature: str) -> None:
         raise WebhookSignatureError("Invalid webhook signature")
     timestamp_text = parts[0][2:]
     digest = parts[1][3:]
-    if not timestamp_text.isdigit():
+    if (
+        not timestamp_text.isascii()
+        or not timestamp_text.isdigit()
+        or len(digest) != hashlib.sha256().digest_size * 2
+        or not digest.isascii()
+        or any(character not in "0123456789abcdefABCDEF" for character in digest)
+    ):
         raise WebhookSignatureError("Invalid webhook signature")
     try:
         timestamp = int(timestamp_text)

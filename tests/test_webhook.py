@@ -127,6 +127,10 @@ def test_http_webhook_uses_the_configured_secret(db, settings, monkeypatch, sign
         {"provider": "unknown"},
         {"payload": {"payment_attempt_id": 0, "status": "failed", "provider_charge_id": "charge-invalid"}},
         {"payload": {"payment_attempt_id": 1, "status": "pending", "provider_charge_id": "charge-invalid"}},
+        {"payload": {"payment_attempt_id": 1, "status": [], "provider_charge_id": "charge-invalid"}},
+        {"payload": {"payment_attempt_id": 1, "status": {}, "provider_charge_id": "charge-invalid"}},
+        {"payload": {"payment_attempt_id": 1, "status": True, "provider_charge_id": "charge-invalid"}},
+        {"payload": {"payment_attempt_id": 1, "status": "failed", "provider_charge_id": []}},
     ],
 )
 def test_http_webhook_rejects_invalid_gateway_fields(db, settings, change):

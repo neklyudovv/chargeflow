@@ -1,6 +1,12 @@
-import pytest
+from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
+from threading import Barrier
 
-from invoices.domain.models import PAYABLE_INVOICE_STATUSES, InvoiceStatus
+import pytest
+from django.db import close_old_connections
+from django.utils import timezone
+
+from invoices.domain.models import PAYABLE_INVOICE_STATUSES, Invoice, InvoiceStatus
 from payments.application.services import (
     InvoiceNotPayable,
     PaymentService,
@@ -8,6 +14,7 @@ from payments.application.services import (
 )
 from payments.application.gateway import ChargeResult
 from payments.domain.models import PaymentAttempt, PaymentStatus
+from subscriptions.domain.models import Subscription, SubscriptionStatus
 
 NON_PAYABLE_STATUSES = sorted(set(InvoiceStatus.values) - PAYABLE_INVOICE_STATUSES)
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -69,3 +76,52 @@ def test_attempt_replays_by_idempotency_key(invoice, monkeypatch):
 
     assert second.pk == first.pk
     assert PaymentAttempt.objects.filter(invoice=invoice).count() == 1
+
+
+def test_concurrent_provider_charge_id_is_applied_to_only_one_invoice(
+    customer, plan, subscription, invoice
+):
+    now = timezone.now()
+    Subscription.objects.filter(pk=subscription.pk).update(
+        status=SubscriptionStatus.ACTIVE
+    )
+    Invoice.objects.filter(pk=invoice.pk).update(status=InvoiceStatus.ISSUED)
+    second_subscription = Subscription.objects.create(
+        customer=customer,
+        plan=plan,
+        status=SubscriptionStatus.ACTIVE,
+        current_period_start=now + timedelta(days=31),
+        current_period_end=now + timedelta(days=61),
+    )
+    second_invoice = Invoice.objects.create(
+        subscription=second_subscription,
+        status=InvoiceStatus.ISSUED,
+        total=invoice.total,
+        currency=invoice.currency,
+        period_start=now + timedelta(days=31),
+        period_end=now + timedelta(days=61),
+    )
+    attempts = [
+        PaymentAttempt.objects.create(invoice=current, amount=current.total)
+        for current in (invoice, second_invoice)
+    ]
+    barrier = Barrier(2)
+
+    def settle(attempt_id):
+        close_old_connections()
+        try:
+            barrier.wait(timeout=10)
+            PaymentService.settle(
+                PaymentAttempt.objects.get(pk=attempt_id),
+                True,
+                {"provider_charge_id": "charge-shared"},
+            )
+        finally:
+            close_old_connections()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(settle, [attempt.pk for attempt in attempts]))
+
+    assert PaymentAttempt.objects.filter(status=PaymentStatus.SUCCESS).count() == 1
+    assert PaymentAttempt.objects.filter(needs_reconciliation=True).count() == 1
+    assert Invoice.objects.filter(status=InvoiceStatus.PAID).count() == 1

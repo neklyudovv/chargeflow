@@ -55,9 +55,9 @@ class PaymentService:
         subscription_id = Invoice.objects.values_list(
             "subscription_id", flat=True
         ).get(pk=invoice_id)
-        Subscription.objects.select_for_update().get(pk=subscription_id)
+        subscription = Subscription.objects.select_for_update().get(pk=subscription_id)
         invoice = (
-            Invoice.objects.select_for_update()
+            Invoice.objects.select_for_update(of=("self",))
             .select_related("subscription__customer")
             .get(pk=invoice_id)
         )
@@ -78,9 +78,15 @@ class PaymentService:
                     raise IdempotencyConflict(
                         "Idempotency key is already bound to a different invoice."
                     )
-                return replay, replay.status == PaymentStatus.PENDING
+                return replay, (
+                    replay.status == PaymentStatus.PENDING
+                    and not replay.needs_reconciliation
+                )
 
         if invoice.status not in PAYABLE_INVOICE_STATUSES:
+            pending = invoice.payment_attempts.filter(status=PaymentStatus.PENDING).first()
+            if pending:
+                return pending, not pending.needs_reconciliation
             raise InvoiceNotPayable(
                 f"Cannot attempt payment on invoice in status '{invoice.status}'"
             )
@@ -93,13 +99,22 @@ class PaymentService:
                     raise IdempotencyConflict(
                         "This invoice already has a payment attempt for this issue."
                     )
-                return this_issue, this_issue.status == PaymentStatus.PENDING
+                return this_issue, (
+                    this_issue.status == PaymentStatus.PENDING
+                    and not this_issue.needs_reconciliation
+                )
 
         existing = invoice.payment_attempts.filter(
             status__in=[PaymentStatus.PENDING, PaymentStatus.SUCCESS]
         ).first()
         if existing:
-            return existing, existing.status == PaymentStatus.PENDING
+            return existing, (
+                existing.status == PaymentStatus.PENDING
+                and not existing.needs_reconciliation
+            )
+
+        if subscription.status == SubscriptionStatus.CANCELED:
+            raise InvoiceNotPayable("Cannot charge a canceled subscription.")
 
         customer = invoice.subscription.customer
         payment = PaymentAttempt.objects.create(
@@ -118,6 +133,8 @@ class PaymentService:
     @staticmethod
     def _charge(payment_id: int) -> PaymentAttempt:
         payment = PaymentAttempt.objects.get(pk=payment_id)
+        if payment.status != PaymentStatus.PENDING or payment.needs_reconciliation:
+            return payment
         request = ChargeRequest(
             payment.amount,
             payment.currency,
@@ -155,6 +172,11 @@ class PaymentService:
             "provider_charge_id", ""
         )
 
+        if not success and (
+            payment.status == PaymentStatus.SUCCESS or payment.needs_reconciliation
+        ):
+            return
+
         if payment.provider_charge_id and incoming_charge_id and (
             payment.provider_charge_id != incoming_charge_id
         ):
@@ -172,6 +194,34 @@ class PaymentService:
         if payment.status == PaymentStatus.SUCCESS or payment.needs_reconciliation:
             return
 
+        payment.provider_response = provider_response
+        if incoming_charge_id and not payment.provider_charge_id:
+            payment.provider_charge_id = incoming_charge_id
+            try:
+                with transaction.atomic():
+                    payment.save(
+                        update_fields=["provider_response", "provider_charge_id"]
+                    )
+            except IntegrityError as exc:
+                cause = exc.__cause__
+                constraint = getattr(getattr(cause, "diag", None), "constraint_name", None)
+                if constraint != "unique_provider_charge":
+                    raise
+                payment.provider_charge_id = ""
+                payment.provider_response = {
+                    "reconciliation": provider_response,
+                    "reconciliation_provider_charge_id": incoming_charge_id,
+                }
+                payment.needs_reconciliation = True
+                payment.save(
+                    update_fields=["provider_response", "needs_reconciliation"]
+                )
+                logger.error(
+                    "Provider charge %s is already bound to another payment",
+                    incoming_charge_id,
+                )
+                return
+
         if success:
             another_success = invoice.payment_attempts.filter(
                 status=PaymentStatus.SUCCESS
@@ -181,8 +231,6 @@ class PaymentService:
                 and invoice.status in PAYABLE_INVOICE_STATUSES
                 and not another_success
             )
-            payment.provider_response = provider_response
-            payment.provider_charge_id = incoming_charge_id
             if not applicable:
                 payment.needs_reconciliation = True
                 payment.save(
@@ -206,13 +254,16 @@ class PaymentService:
             return
 
         payment.status = PaymentStatus.FAILED
-        payment.provider_response = provider_response
-        payment.provider_charge_id = incoming_charge_id
         payment.save(
             update_fields=["status", "provider_response", "provider_charge_id"]
         )
-        InvoiceService.mark_failed(invoice)
-        SubscriptionService.mark_overdue(subscription)
+        if (
+            invoice.status in PAYABLE_INVOICE_STATUSES
+            and subscription.status != SubscriptionStatus.CANCELED
+            and not invoice.payment_attempts.filter(status=PaymentStatus.SUCCESS).exists()
+        ):
+            InvoiceService.mark_failed(invoice)
+            SubscriptionService.mark_overdue(subscription)
 
     @staticmethod
     def charge_issued(invoice_id) -> PaymentAttempt | None:
@@ -264,7 +315,7 @@ class PaymentService:
         ):
             raise ValueError("payment_attempt_id must be a positive integer.")
         status = payload.get("status")
-        if payment_id is not None and status not in {"success", "failed"}:
+        if payment_id is not None and status not in ("success", "failed"):
             raise ValueError("Unknown payment status.")
         provider_charge_id = payload.get("provider_charge_id")
         if payment_id is not None and (

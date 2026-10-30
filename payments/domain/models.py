@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -57,6 +58,11 @@ class PaymentAttempt(models.Model):
                 fields=["provider", "provider_idempotency_key"],
                 name="unique_provider_payment_key",
             ),
+            models.UniqueConstraint(
+                fields=["provider", "provider_charge_id"],
+                condition=~models.Q(provider_charge_id=""),
+                name="unique_provider_charge",
+            ),
         ]
 
     def clean(self):
@@ -65,13 +71,38 @@ class PaymentAttempt(models.Model):
         organization_id = Invoice.objects.values_list("organization_id", flat=True).get(pk=self.invoice_id)
         if self.organization_id is not None and self.organization_id != organization_id:
             raise ValidationError("Organization must match the parent record.")
-        if self.pk and PaymentAttempt.objects.filter(pk=self.pk).exclude(organization_id=organization_id).exists():
-            raise ValidationError("Cannot move a billing record to another organization.")
+        if self.pk:
+            original = PaymentAttempt.objects.filter(pk=self.pk).values(
+                "organization_id",
+                "invoice_id",
+                "amount",
+                "currency",
+                "provider",
+                "provider_idempotency_key",
+                "provider_customer_id",
+                "provider_payment_method_id",
+                "idempotency_key",
+            ).first()
+            if original:
+                current = {
+                    "organization_id": self.organization_id,
+                    "invoice_id": self.invoice_id,
+                    "amount": Decimal(self.amount).quantize(Decimal("0.01")),
+                    "currency": self.currency,
+                    "provider": self.provider,
+                    "provider_idempotency_key": self.provider_idempotency_key,
+                    "provider_customer_id": self.provider_customer_id,
+                    "provider_payment_method_id": self.provider_payment_method_id,
+                    "idempotency_key": self.idempotency_key,
+                }
+                original["amount"] = original["amount"].quantize(Decimal("0.01"))
+                if current != original:
+                    raise ValidationError("Payment request snapshots are immutable.")
         self.organization_id = organization_id
 
     def save(self, *args, **kwargs):
-        self.clean()
         self.idempotency_key = self.idempotency_key or None
+        self.clean()
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -118,10 +149,7 @@ class WebhookEvent(models.Model):
 
 class MockChargeReceipt(models.Model):
     provider_idempotency_key = models.CharField(max_length=255, unique=True)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    currency = models.CharField(max_length=3)
-    provider_customer_id = models.CharField(max_length=255, blank=True, default="")
-    provider_payment_method_id = models.CharField(max_length=255, blank=True, default="")
+    request_fingerprint = models.CharField(max_length=64)
     success = models.BooleanField()
     provider_charge_id = models.CharField(max_length=255, unique=True)
     provider_response = models.JSONField(default=dict)

@@ -39,6 +39,23 @@ class PaymentAttemptViewSet(
             organization=org
         )
 
+    @extend_schema(
+        request=PaymentAttemptCreateSerializer,
+        responses={
+            201: PaymentAttemptSerializer,
+            400: OpenApiTypes.OBJECT,
+            409: OpenApiTypes.OBJECT,
+        },
+        parameters=[
+            OpenApiParameter(
+                name="Idempotency-Key",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.HEADER,
+                required=False,
+                description="Project-scoped client request key",
+            )
+        ],
+    )
     def create(self, request, *args, **kwargs):
         org = get_request_organization(request)
         if org is None:
@@ -73,7 +90,11 @@ class WebhookView(APIView):
 
     @extend_schema(
         request=WebhookSerializer,
-        responses={200: WebhookResponseSerializer},
+        responses={
+            200: WebhookResponseSerializer,
+            400: OpenApiTypes.OBJECT,
+            415: OpenApiTypes.OBJECT,
+        },
         parameters=[
             OpenApiParameter(
                 name="X-Webhook-Signature",

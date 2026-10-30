@@ -1,5 +1,8 @@
+import hashlib
+import json
 import random
 import uuid
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -10,6 +13,18 @@ from payments.domain.models import MockChargeReceipt
 
 class MockPaymentGateway:
     def charge(self, request: ChargeRequest) -> ChargeResult:
+        request_fingerprint = hashlib.sha256(
+            json.dumps(
+                {
+                    "amount": str(Decimal(request.amount).quantize(Decimal("0.01"))),
+                    "currency": request.currency,
+                    "provider_customer_id": request.provider_customer_id,
+                    "provider_payment_method_id": request.provider_payment_method_id,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
         receipt = MockChargeReceipt.objects.filter(
             provider_idempotency_key=request.idempotency_key
         ).first()
@@ -20,10 +35,7 @@ class MockPaymentGateway:
                 with transaction.atomic():
                     receipt = MockChargeReceipt.objects.create(
                         provider_idempotency_key=request.idempotency_key,
-                        amount=request.amount,
-                        currency=request.currency,
-                        provider_customer_id=request.provider_customer_id,
-                        provider_payment_method_id=request.provider_payment_method_id,
+                        request_fingerprint=request_fingerprint,
                         success=success,
                         provider_charge_id=f"mock_{uuid.uuid4().hex}",
                         provider_response=response,
@@ -33,19 +45,7 @@ class MockPaymentGateway:
                     provider_idempotency_key=request.idempotency_key
                 )
 
-        params = (
-            receipt.amount,
-            receipt.currency,
-            receipt.provider_customer_id,
-            receipt.provider_payment_method_id,
-        )
-        requested = (
-            request.amount,
-            request.currency,
-            request.provider_customer_id,
-            request.provider_payment_method_id,
-        )
-        if params != requested:
+        if receipt.request_fingerprint != request_fingerprint:
             raise ValueError("Provider idempotency key was reused with different parameters.")
         return ChargeResult(
             receipt.success,
