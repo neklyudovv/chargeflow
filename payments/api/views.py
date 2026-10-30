@@ -1,7 +1,9 @@
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.authentication import BaseAuthentication
+from rest_framework.parsers import JSONParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -12,6 +14,7 @@ from invoices.domain.models import Invoice
 from payments.api.serializers import (
     PaymentAttemptCreateSerializer,
     PaymentAttemptSerializer,
+    WebhookResponseSerializer,
     WebhookSerializer,
 )
 from payments.application.services import IdempotencyConflict, InvoiceNotPayable, PaymentService
@@ -66,10 +69,20 @@ class WebhookView(APIView):
     # Webhook is called by payment provider - no API key auth needed
     authentication_classes: list[type[BaseAuthentication]] = []
     permission_classes = [AllowAny]
+    parser_classes = [JSONParser]
 
     @extend_schema(
         request=WebhookSerializer,
-        responses={200: OpenApiResponse(description="Event acknowledged.")},
+        responses={200: WebhookResponseSerializer},
+        parameters=[
+            OpenApiParameter(
+                name="X-Webhook-Signature",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.HEADER,
+                required=True,
+                description="t=<unix>,v1=<HMAC-SHA256 of t.raw_body>",
+            )
+        ],
     )
     def post(self, request):
         signature = request.headers.get("X-Webhook-Signature", "")
@@ -83,5 +96,7 @@ class WebhookView(APIView):
         PaymentService.handle_webhook(
             event_type=serializer.validated_data["event_type"],
             payload=serializer.validated_data["payload"],
+            provider=serializer.validated_data["provider"],
+            provider_event_id=serializer.validated_data["provider_event_id"],
         )
         return Response({"status": "ok"})

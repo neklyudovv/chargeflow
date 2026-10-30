@@ -3,12 +3,14 @@ import pytest
 from invoices.domain.models import PAYABLE_INVOICE_STATUSES, InvoiceStatus
 from payments.application.services import (
     InvoiceNotPayable,
-    MockPaymentProvider,
     PaymentService,
+    get_payment_gateway,
 )
+from payments.application.gateway import ChargeResult
 from payments.domain.models import PaymentAttempt, PaymentStatus
 
 NON_PAYABLE_STATUSES = sorted(set(InvoiceStatus.values) - PAYABLE_INVOICE_STATUSES)
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
 def _force_status(invoice, status):
@@ -38,7 +40,11 @@ def test_attempt_rejects_non_payable_invoice(invoice, status):
 
 
 def test_attempt_records_decline_when_provider_fails(invoice, monkeypatch):
-    monkeypatch.setattr(MockPaymentProvider, "charge", lambda amount, currency: False)
+    monkeypatch.setattr(
+        get_payment_gateway("mock"),
+        "charge",
+        lambda request: ChargeResult(False, "charge_declined", {"status": "declined"}),
+    )
     _force_status(invoice, InvoiceStatus.ISSUED)
 
     payment = PaymentService.attempt(invoice)
@@ -49,7 +55,11 @@ def test_attempt_records_decline_when_provider_fails(invoice, monkeypatch):
 
 def test_attempt_replays_by_idempotency_key(invoice, monkeypatch):
     # a decline leaves the invoice payable, so only the key keeps the retry from charging again
-    monkeypatch.setattr(MockPaymentProvider, "charge", lambda amount, currency: False)
+    monkeypatch.setattr(
+        get_payment_gateway("mock"),
+        "charge",
+        lambda request: ChargeResult(False, "charge_declined", {"status": "declined"}),
+    )
     _force_status(invoice, InvoiceStatus.ISSUED)
 
     first = PaymentService.attempt(invoice, idempotency_key="req-123")

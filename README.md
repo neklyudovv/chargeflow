@@ -42,7 +42,7 @@ Chargeflow models a real billing engine as a **modular monolith** - no microserv
 * Define **plans** with pricing and billing intervals (day / week / month / year)
 * Manage the **subscription lifecycle** through an explicit state machine
 * **Invoices are generated automatically** when a subscription is created, activated or renewed, not by an endpoint
-* **Payments** are attempted by background workers and reconciled through idempotent webhooks
+* **Payments** are attempted through a provider gateway by background workers and reconciled through idempotent webhooks
 * **Failed payments are retried automatically** by a scheduled Celery beat dunning job
 * **Synchronous core** - a state change and its consequences are direct service calls in one transaction under row locks; only the charge is handed to a Celery worker, after the commit
 * **Multi-tenant** by design - every request is scoped to an organization
@@ -74,32 +74,55 @@ Celery is for external I/O and the schedule. `charge_invoice` runs on the `io` q
 * `run_trial_activations` activates trials that have ended
 * `reconcile_stuck` re-hands the charge of an issued invoice that has no attempt after ten minutes, in case the hand-off was lost
 
-Tasks retry transient database errors with backoff and are idempotent: a unique-per-period constraint on invoices, state guards under the lock, and a no-duplicate guard on payment attempts.
+Tasks retry transient database errors with backoff and are idempotent: a unique-per-period constraint on invoices, state guards under the lock, and separate client and provider idempotency keys on payment attempts.
+
+### 4. Payment gateway
+
+Chargeflow currently ships only a durable mock gateway; it does not connect to a real processor. Customers may hold optional provider customer and payment-method tokens, but Chargeflow accepts no raw card fields.
+
+Charging has three committed phases: create or recover a `PENDING` attempt and snapshot its amount, currency and provider tokens; call the gateway without an open database transaction or row lock; then settle in a new transaction under subscription, invoice and attempt locks. `PaymentService.attempt` and `PaymentService.charge_issued` reject callers already inside an atomic block. An ambiguous transport failure leaves the attempt pending, and `reconcile_stuck` retries the same immutable provider request and key. The mock stores its receipt separately, so replay returns the first result even after a process restart or a failure-rate change.
+
+Provider webhooks use the same settlement path. The request is JSON with this shape:
+
+```json
+{
+  "provider": "mock",
+  "provider_event_id": "evt_123",
+  "event_type": "payment.updated",
+  "payload": {
+    "payment_attempt_id": 42,
+    "status": "success",
+    "provider_charge_id": "mock_123"
+  }
+}
+```
+
+Send `X-Webhook-Signature: t=<unix>,v1=<hex>` where the hex value is HMAC-SHA256 over `<unix>.<raw request bytes>` using `WEBHOOK_SECRET`. Timestamps more than 300 seconds in the past or future, malformed signatures, non-JSON requests, unknown providers, invalid attempt IDs and statuses are rejected. Events are deduplicated by provider and provider event ID; the first committed payload wins. A well-formed event for an unknown payment is acknowledged and retained without changing billing state.
 
 Redis is the broker, `celery_worker` consumes the `io` and `batch` queues, and `celery_beat` schedules the cycles. Inline tasks are available only when explicitly enabled in DEBUG mode; normal deployments require a broker and worker.
 
-### 4. Domain Layer (`domain/`)
+### 5. Domain Layer (`domain/`)
 
 Entities and state-machine transition tables. Illegal state changes are impossible by construction: every transition goes through `model.transition_to(new_state)`, which raises `InvalidStatusTransition` on an illegal move.
 
-### 5. Application Layer (`application/services.py`)
+### 6. Application Layer (`application/services.py`)
 
 Orchestration and use cases. Services wrap their work in `@transaction.atomic` and call the services of the apps they depend on - keeping the API layer thin and the business rules in one place.
 
-### 6. API Layer (`api/`)
+### 7. API Layer (`api/`)
 
 Built on **Django REST Framework**: ViewSets, serializers, and routing. This layer is a thin adapter between HTTP and the services, plus authentication and org resolution.
 
-### 7. State Machines
+### 8. State Machines
 
 * **Subscription:** `TRIAL -> ACTIVE -> OVERDUE -> CANCELED`
 * **Invoice:** `DRAFT -> ISSUED -> PAID | FAILED | OVERDUE | CANCELED` (with `FAILED -> ISSUED` retry)
 
-### 8. Multi-tenancy
+### 9. Multi-tenancy
 
 Every authenticated request resolves an organization (API key -> `X-Organization-Id` header -> implicit single org), and **all querysets are scoped to it**, so tenants can never read each other's data.
 
-### 9. Docker Environment
+### 10. Docker Environment
 
 `docker-compose` runs the following services:
 

@@ -113,6 +113,8 @@ class Customer(models.Model):
     )
     email = models.EmailField()
     name = models.CharField(max_length=255)
+    provider_customer_id = models.CharField(max_length=255, blank=True, default="")
+    provider_payment_method_id = models.CharField(max_length=255, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

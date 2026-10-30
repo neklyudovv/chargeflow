@@ -15,7 +15,7 @@ from payments.domain.models import PaymentAttempt, WebhookEvent
 from subscriptions.application.services import SubscriptionService
 from tests.test_project_security import client_for, issue_invoice
 
-pytestmark = pytest.mark.django_db
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
 @pytest.mark.parametrize("role", ["owner", "admin"])
@@ -78,7 +78,12 @@ def test_structural_scope_follows_billing_chain(organization, customer, plan, dj
     invoice = subscription.invoices.get()
     payment = invoice.payment_attempts.get()
     line = invoice.lines.get()
-    PaymentService.handle_webhook("payment.success", {"payment_attempt_id": payment.pk, "status": "success"})
+    PaymentService.handle_webhook(
+        "payment.success",
+        {"payment_attempt_id": payment.pk, "status": "success", "provider_charge_id": "charge-scope"},
+        provider="mock",
+        provider_event_id="evt-scope",
+    )
     assert {row.organization_id for row in [subscription, invoice, line, payment, WebhookEvent.objects.get()]} == {organization.pk}
 
 
@@ -166,6 +171,11 @@ def test_organization_migration_preserves_existing_billing_rows(mismatched):
         from subscriptions.domain.models import Subscription
         for model, pk in [(Subscription, subscription.pk), (Invoice, invoice.pk), (InvoiceLine, line.pk), (PaymentAttempt, payment.pk), (WebhookEvent, known.pk)]:
             assert model.objects.get(pk=pk).organization_id == org.pk
+        migrated_payment = PaymentAttempt.objects.get(pk=payment.pk)
+        assert migrated_payment.provider_idempotency_key == f"legacy-payment-{payment.pk}"
+        assert migrated_payment.currency == "USD"
+        assert WebhookEvent.objects.get(pk=known.pk).provider_event_id == f"legacy-webhook-{known.pk}"
+        assert WebhookEvent.objects.get(pk=unknown.pk).provider_event_id == f"legacy-webhook-{unknown.pk}"
         assert WebhookEvent.objects.get(pk=unknown.pk).organization_id is None
     finally:
         MigrationExecutor(connection).migrate(latest)
@@ -201,8 +211,8 @@ def test_key_serialization_does_not_deadlock_new_billing_foreign_keys(organizati
                     cursor.execute("SET LOCAL lock_timeout = '5s'")
                 subscription = SubscriptionService.create(customer, plan)
                 invoice = issue_invoice(subscription)
-                barrier.wait(timeout=10)
-                PaymentService.attempt(invoice, f"new-key-{number}")
+            barrier.wait(timeout=10)
+            PaymentService.attempt(invoice, f"new-key-{number}")
         finally:
             close_old_connections()
 

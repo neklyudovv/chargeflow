@@ -1,11 +1,14 @@
 from datetime import timedelta
 
+import pytest
 from django.utils import timezone
 
 from invoices.domain.models import Invoice
 from subscriptions.application.services import SubscriptionService
 from subscriptions.domain.models import SubscriptionStatus
 from subscriptions.tasks import run_renewals, run_trial_activations
+
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
 def _set(subscription, status, period_end):

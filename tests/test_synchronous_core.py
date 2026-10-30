@@ -7,16 +7,19 @@ import re
 from datetime import timedelta
 
 import pytest
-from django.db import connection
+from django.db import connection, transaction
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from invoices.domain.models import Invoice, InvoiceStatus
 from invoices.tasks import MAX_DUNNING_ATTEMPTS, _dun_invoice, run_dunning
-from payments.application.services import MockPaymentProvider, PaymentService
+from payments.application.gateway import ChargeResult
+from payments.application.services import PaymentService, get_payment_gateway
 from payments.domain.models import PaymentAttempt, PaymentStatus
 from subscriptions.application.services import SubscriptionService
 from subscriptions.domain.models import CancellationReason, SubscriptionStatus
+
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
 def _force(obj, status):
@@ -25,19 +28,23 @@ def _force(obj, status):
 
 
 def _decline(monkeypatch):
-    monkeypatch.setattr(MockPaymentProvider, "charge", staticmethod(lambda a, c: False))
+    monkeypatch.setattr(
+        get_payment_gateway("mock"),
+        "charge",
+        lambda request: ChargeResult(False, "charge_declined", {"status": "declined"}),
+    )
 
 
 def test_create_issues_the_first_invoice_in_the_same_transaction(
     customer, plan, django_capture_on_commit_callbacks
 ):
-    with django_capture_on_commit_callbacks(execute=False) as callbacks:
+    with transaction.atomic():
         subscription = SubscriptionService.create(customer, plan)
+        invoice = Invoice.objects.get(subscription=subscription)
+        assert invoice.status == InvoiceStatus.ISSUED
 
-    invoice = Invoice.objects.get(subscription=subscription)
-    assert invoice.status == InvoiceStatus.ISSUED
-    # the only deferred work is the charge handed to the worker
-    assert len(callbacks) == 1
+    invoice.refresh_from_db()
+    assert invoice.status == InvoiceStatus.PAID
 
 
 def test_declined_charge_fails_invoice_and_subscription_in_the_same_transaction(
@@ -82,7 +89,10 @@ def test_webhook_success_pays_the_invoice_in_the_same_transaction(
 
     with django_capture_on_commit_callbacks(execute=False):
         PaymentService.handle_webhook(
-            "payment.updated", {"payment_attempt_id": attempt.pk, "status": "success"}
+            "payment.updated",
+            {"payment_attempt_id": attempt.pk, "status": "success", "provider_charge_id": "charge_webhook"},
+            provider="mock",
+            provider_event_id="evt-sync-success",
         )
 
     invoice.refresh_from_db()
@@ -201,7 +211,10 @@ def _manual_attempt(subscription, invoice):
 def _webhook(subscription, invoice):
     attempt = PaymentAttempt.objects.create(invoice=invoice, amount=invoice.total)
     PaymentService.handle_webhook(
-        "payment.updated", {"payment_attempt_id": attempt.pk, "status": "success"}
+        "payment.updated",
+        {"payment_attempt_id": attempt.pk, "status": "success", "provider_charge_id": "charge-lock"},
+        provider="mock",
+        provider_event_id="evt-lock-success",
     )
 
 
