@@ -47,7 +47,9 @@ class WebhookSerializer(serializers.Serializer):
     def to_internal_value(self, data):
         expected = {"provider", "provider_event_id", "event_type", "payload"}
         if not isinstance(data, dict) or set(data) != expected:
-            raise serializers.ValidationError("Unknown or missing webhook fields.")
+            raise serializers.ValidationError(
+                {"non_field_errors": ["Unknown or missing webhook fields."]}
+            )
         return super().to_internal_value(data)
 
 

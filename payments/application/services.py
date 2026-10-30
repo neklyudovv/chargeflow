@@ -222,6 +222,9 @@ class PaymentService:
                 )
                 return
 
+        if not success and payment.status == PaymentStatus.FAILED:
+            return
+
         if success:
             another_success = invoice.payment_attempts.filter(
                 status=PaymentStatus.SUCCESS
