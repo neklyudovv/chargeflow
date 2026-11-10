@@ -1,4 +1,7 @@
+from django.core.exceptions import ValidationError as ModelValidationError
 from django.shortcuts import get_object_or_404
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -9,7 +12,7 @@ from accounts.permissions import ProjectAccess
 from accounts.request_context import get_request_organization
 from plans.models import Plan
 from subscriptions.api.serializers import SubscriptionCreateSerializer, SubscriptionSerializer
-from subscriptions.application.services import SubscriptionService
+from subscriptions.application.services import SubscriptionConflict, SubscriptionService
 from subscriptions.domain.models import InvalidStatusTransition, Subscription
 
 
@@ -39,6 +42,14 @@ class SubscriptionViewSet(
             organization=org
         )
 
+    @extend_schema(
+        request=SubscriptionCreateSerializer,
+        responses={200: SubscriptionSerializer, 201: SubscriptionSerializer, 409: OpenApiTypes.OBJECT},
+        parameters=[OpenApiParameter(
+            name="Idempotency-Key", type=OpenApiTypes.STR, location=OpenApiParameter.HEADER,
+            description="Project-scoped subscription request key (1 to 255 characters)",
+        )],
+    )
     def create(self, request, *args, **kwargs):
         org = get_request_organization(request)
         if org is None:
@@ -59,11 +70,15 @@ class SubscriptionViewSet(
             organization=org,
         )
         try:
-            subscription = SubscriptionService.create(customer, plan)
+            subscription = SubscriptionService.create(customer, plan, idempotency_key=request.headers.get("Idempotency-Key"))
+        except SubscriptionConflict as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        except ModelValidationError as exc:
+            raise ValidationError(exc.message_dict)
         except ValueError as exc:
             # e.g. subscribing to an archived plan - a bad request, not a fault
             raise ValidationError({"detail": str(exc)})
-        return Response(SubscriptionSerializer(subscription).data, status=status.HTTP_201_CREATED)
+        return Response(SubscriptionSerializer(subscription).data, status=status.HTTP_200_OK if getattr(subscription, "_idempotent_replay", False) else status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"])
     def activate(self, request, pk=None):

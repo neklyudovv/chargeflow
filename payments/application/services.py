@@ -128,6 +128,8 @@ class PaymentService:
             status=PaymentStatus.PENDING,
             idempotency_key=idempotency_key,
         )
+        invoice.attempt_count += 1
+        invoice.save(update_fields=["attempt_count", "updated_at"])
         return payment, True
 
     @staticmethod
@@ -265,8 +267,7 @@ class PaymentService:
             and subscription.status != SubscriptionStatus.CANCELED
             and not invoice.payment_attempts.filter(status=PaymentStatus.SUCCESS).exists()
         ):
-            InvoiceService.mark_failed(invoice)
-            SubscriptionService.mark_overdue(subscription)
+            InvoiceService.record_payment_failure(invoice)
 
     @staticmethod
     def charge_issued(invoice_id) -> PaymentAttempt | None:

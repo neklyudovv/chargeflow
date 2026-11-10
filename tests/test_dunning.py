@@ -4,7 +4,7 @@ import pytest
 from django.utils import timezone
 
 from invoices.domain.models import Invoice, InvoiceStatus
-from invoices.tasks import MAX_DUNNING_ATTEMPTS, run_dunning
+from invoices.tasks import run_dunning
 from payments.domain.models import PaymentAttempt, PaymentStatus
 from subscriptions.application.services import SubscriptionService
 from subscriptions.domain.models import CancellationReason, SubscriptionStatus
@@ -20,7 +20,7 @@ def _force_status(obj, status):
 def test_dunning_retries_failed_invoice(invoice, django_capture_on_commit_callbacks):
     _force_status(invoice, InvoiceStatus.FAILED)
 
-    # the reissue hands the charge to the worker on commit
+    Invoice.objects.filter(pk=invoice.pk).update(next_retry_at=timezone.now() - timedelta(seconds=1))
     with django_capture_on_commit_callbacks(execute=True):
         run_dunning()
 
@@ -33,6 +33,7 @@ def test_dunning_leaves_non_failed_invoice_untouched(
 ):
     _force_status(invoice, InvoiceStatus.PAID)
 
+    Invoice.objects.filter(pk=invoice.pk).update(next_retry_at=timezone.now() - timedelta(seconds=1))
     with django_capture_on_commit_callbacks(execute=True):
         run_dunning()
 
@@ -47,6 +48,7 @@ def test_dunning_reactivates_overdue_subscription(
     _force_status(subscription, SubscriptionStatus.OVERDUE)
     _force_status(invoice, InvoiceStatus.FAILED)
 
+    Invoice.objects.filter(pk=invoice.pk).update(next_retry_at=timezone.now() - timedelta(seconds=1))
     with django_capture_on_commit_callbacks(execute=True):
         run_dunning()
 
@@ -64,18 +66,19 @@ def test_dunning_exhaustion_closes_subscription_for_non_payment(
 ):
     _force_status(subscription, initial_status)
     _force_status(invoice, InvoiceStatus.FAILED)
-    for _ in range(MAX_DUNNING_ATTEMPTS):
+    for _ in range(4):
         PaymentAttempt.objects.create(
             invoice=invoice, amount=invoice.total, status=PaymentStatus.FAILED
         )
 
+    Invoice.objects.filter(pk=invoice.pk).update(next_retry_at=timezone.now() - timedelta(seconds=1))
     with django_capture_on_commit_callbacks(execute=True):
         run_dunning()
 
     invoice.refresh_from_db()
     subscription.refresh_from_db()
     assert invoice.status == InvoiceStatus.OVERDUE
-    assert PaymentAttempt.objects.filter(invoice=invoice).count() == MAX_DUNNING_ATTEMPTS
+    assert PaymentAttempt.objects.filter(invoice=invoice).count() == 4
     assert subscription.status == SubscriptionStatus.CANCELED
     assert subscription.canceled_reason == CancellationReason.NON_PAYMENT
 

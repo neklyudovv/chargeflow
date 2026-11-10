@@ -134,9 +134,10 @@ def test_dunning_skips_locked_subscription(customer, plan, monkeypatch):
         finally:
             close_old_connections()
 
-    with transaction.atomic(), ThreadPoolExecutor(max_workers=1) as pool:
-        Subscription.objects.select_for_update().get(pk=sub.pk)
-        pool.submit(run).result(timeout=5)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with transaction.atomic():
+            Subscription.objects.select_for_update().get(pk=sub.pk)
+            pool.submit(run).result(timeout=5)
     assert sub.invoices.get().payment_attempts.count() == 1
 
 
@@ -199,3 +200,66 @@ def test_plan_validation_rejects_invalid_model_values(plan, field, value):
     setattr(plan, field, value)
     with pytest.raises(ValidationError):
         plan.save()
+
+
+def test_subscription_keys_are_scoped_to_project(api, customer, plan, organization, monkeypatch):
+    monkeypatch.setattr(charge_invoice, "delay", lambda invoice_id: None)
+    body = {"customer_id": customer.pk, "plan_id": plan.pk}
+    first = api.post("/api/subscriptions/", body, format="json", HTTP_IDEMPOTENCY_KEY="shared")
+    other = Organization.objects.create(owner=organization.owner, name="Other")
+    other_customer = Customer.objects.create(organization=other, email="other@example.com")
+    other_plan = Plan.objects.create(organization=other, name="Other", price="1.00")
+    _, secret = ApiKey.create_for_organization(other, scope="read_write")
+    api.credentials(HTTP_AUTHORIZATION=f"Bearer {secret}")
+    second = api.post("/api/subscriptions/", {"customer_id": other_customer.pk, "plan_id": other_plan.pk}, format="json", HTTP_IDEMPOTENCY_KEY="shared")
+    assert first.status_code == second.status_code == 201
+    assert first.data["id"] != second.data["id"]
+
+
+@pytest.mark.parametrize("key", ["", " ", "k" * 256])
+def test_invalid_subscription_key_is_a_client_error(api, customer, plan, key):
+    response = api.post("/api/subscriptions/", {"customer_id": customer.pk, "plan_id": plan.pk}, format="json", HTTP_IDEMPOTENCY_KEY=key)
+    assert response.status_code == 400
+    assert not Subscription.objects.exists()
+
+
+def test_concurrent_dunning_reissues_once(customer, plan, monkeypatch):
+    clock = [timezone.now()]
+    monkeypatch.setattr(timezone, "now", lambda: clock[0])
+    monkeypatch.setattr(get_payment_gateway("mock"), "charge", lambda request: ChargeResult(False, request.idempotency_key, {}))
+    sub = SubscriptionService.create(customer, plan)
+    clock[0] += timedelta(days=1, hours=2)
+    queued = []
+    monkeypatch.setattr(charge_invoice, "delay", queued.append)
+    barrier = Barrier(2)
+
+    def run(_):
+        close_old_connections()
+        try:
+            barrier.wait(timeout=5)
+            run_dunning()
+        finally:
+            close_old_connections()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(run, range(2)))
+    invoice = sub.invoices.get()
+    assert queued == [invoice.pk]
+    charge_invoice(invoice.pk)
+    invoice.refresh_from_db()
+    assert invoice.payment_attempts.count() == 2
+    assert invoice.next_retry_at == clock[0] + timedelta(days=2) - timedelta(hours=2)
+
+
+def test_expired_trial_bills_from_its_end(customer, plan, monkeypatch):
+    clock = [datetime(2028, 1, 24, 12, tzinfo=dt_timezone.utc)]
+    monkeypatch.setattr(timezone, "now", lambda: clock[0])
+    monkeypatch.setattr(charge_invoice, "delay", lambda invoice_id: None)
+    plan.trial_period_days = 7
+    plan.save()
+    sub = SubscriptionService.create(customer, plan)
+    clock[0] += timedelta(days=9)
+    SubscriptionService.activate(sub)
+    sub.refresh_from_db()
+    assert sub.current_period_start == datetime(2028, 1, 31, 12, tzinfo=dt_timezone.utc)
+    assert sub.current_period_end == datetime(2028, 2, 29, 12, tzinfo=dt_timezone.utc)

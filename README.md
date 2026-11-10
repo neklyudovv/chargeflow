@@ -69,7 +69,7 @@ Every fact has one consumer. An in-process event bus gave the core extra hops an
 
 Celery is for external I/O and the schedule. `charge_invoice` runs on the `io` queue and is handed to the worker with `transaction.on_commit` when an invoice is issued, so it never sees a rolled-back state. The beat cycles run on the `batch` queue and call the same services:
 
-* `run_dunning` re-issues failed invoices up to a retry cap, then marks them overdue and cancels the subscription
+* `run_dunning` retries on days 1, 3 and 7 after the first failure; a failed final retry cancels the subscription for `non_payment`
 * `run_renewals` rolls expired subscriptions into the next period
 * `run_trial_activations` activates trials that have ended
 * `reconcile_stuck` resumes abandoned PENDING attempts and re-hands issued invoices with no attempt after ten minutes
@@ -264,3 +264,39 @@ correct that inconsistent data before retrying. Unknown-payment webhook events
 are preserved with a null organization, including newly acknowledged unknown
 notifications; they cannot change billing state. Other billing records require an
 organization matching their parent. Back up the database before migration.
+
+### Billing periods and payment retries
+
+Renewals start at the previous period end, preserving the original day of the
+month across short months and leap years. An expired trial starts its paid
+period at the trial end; an early manual activation starts it immediately. Each
+renewal advances one period, so missed periods are billed in order.
+
+The first declined payment makes the subscription `OVERDUE`. Automatic retries
+are due 1, 3 and 7 days after that first failure and run on the next hourly
+dunning cycle. The initial payment plus three retries gives four attempts. A
+failed final retry leaves the invoice `OVERDUE` and cancels the subscription with
+`non_payment`. A successful payment clears the retry schedule and restores an
+overdue subscription once its other failed/overdue invoices are paid. Manual
+payment requests remain available; they count toward the same retry limit.
+Invoice responses expose `attempt_count` (charges prepared, including pending
+and successful charges), `first_failed_at` and `next_retry_at`.
+
+`POST /api/subscriptions/` accepts an optional `Idempotency-Key` header (1–255
+characters), scoped to the project. The first request returns 201; a replay
+with the same customer and plan returns the original subscription with 200,
+even after cancellation. Reusing the key with different ids returns 409. A
+second live subscription (`TRIAL`, `ACTIVE` or `OVERDUE`) for the same customer
+and plan also returns 409; a canceled subscription permits a new request with
+a new key.
+
+Plans require nonnegative prices and trial days, a known billing interval and
+an uppercase ISO 4217 currency code. The currency snapshot is taken from
+[SIX List One](https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml).
+
+Before upgrading, resolve duplicate live customer/plan subscriptions and
+negative prices or trial days. Migrations reject these rows instead of
+canceling subscriptions or changing prices automatically. Existing invoices
+receive attempt counts and retry dates from their recorded attempts; historical
+first-failure times are approximated by the first declined attempt's timestamp.
+Existing subscriptions retain their current period's calendar day as the anchor.
