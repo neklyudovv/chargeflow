@@ -1,5 +1,5 @@
 from django.http import HttpRequest
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from config.api import APIError
 
 from accounts.models import Organization, OrganizationMembership
 
@@ -31,7 +31,7 @@ def get_request_organization(request: HttpRequest) -> Organization | None:
                 user=user,
             )
         except (OrganizationMembership.DoesNotExist, ValueError, TypeError):
-            raise PermissionDenied("Organization not found or not accessible.")
+            raise APIError("organization_forbidden", "Organization not found or not accessible.", status_code=403)
         request.membership = membership
         return membership.organization
 
@@ -42,7 +42,5 @@ def get_request_organization(request: HttpRequest) -> Organization | None:
         request.membership = memberships[0]
         return memberships[0].organization
     if len(memberships) > 1:
-        raise ValidationError(
-            "Multiple organizations found. Provide the X-Organization-Id header to specify which one."
-        )
+        raise APIError("organization_ambiguous", "Multiple organizations found. Select one with X-Organization-Id.")
     return None

@@ -21,10 +21,10 @@ def test_http_webhook_binds_timestamp_and_body(invoice, settings, age, valid, ex
         timestamp = str(int(timestamp) + 1)
     signature = f't={timestamp},v1={digest}'
     client = APIClient()
-    response = client.post('/api/payments/webhook/', body, content_type='application/json', HTTP_X_WEBHOOK_SIGNATURE=signature)
+    response = client.post('/api/v1/webhooks/payments/', body, content_type='application/json', HTTP_X_WEBHOOK_SIGNATURE=signature)
     assert response.status_code == expected
     assert WebhookEvent.objects.count() == (expected == 200)
     if expected == 200:
-        replay = client.post('/api/payments/webhook/', body, content_type='application/json', HTTP_X_WEBHOOK_SIGNATURE=signature)
+        replay = client.post('/api/v1/webhooks/payments/', body, content_type='application/json', HTTP_X_WEBHOOK_SIGNATURE=signature)
         assert replay.status_code == 200
         assert WebhookEvent.objects.get().provider_event_id == 'evt_http'

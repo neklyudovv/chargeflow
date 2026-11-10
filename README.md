@@ -134,48 +134,41 @@ Every authenticated request resolves an organization (API key -> `X-Organization
 
 ## API Endpoints
 
-Interactive documentation is generated from the code with **drf-spectacular** and served at:
+The public business API is versioned under `/api/v1/`.
 
-* **Swagger UI** — `/api/docs/`
-* **Redoc** — `/api/redoc/`
-* **OpenAPI schema** — `/api/schema/`
+- Swagger: `/api/docs/`
+- ReDoc: `/api/redoc/`
+- Downloadable schema: `/api/schema/` (JSON: `/api/schema/?format=json`)
+- Committed OpenAPI 3.1 contract: [`openapi.yaml`](openapi.yaml)
+- Public liveness probe: `GET /health/` → `{"status":"ok"}`
 
-The endpoints below are grouped by domain.
+| Resource | Routes |
+|---|---|
+| Authentication | `POST /api/v1/auth/register/`, `POST /api/v1/auth/login/` |
+| Current account | `GET /api/v1/me/` |
+| Organizations | `GET`, `POST /api/v1/organizations/` |
+| API keys | `GET`, `POST /api/v1/api-keys/`; `DELETE /api/v1/api-keys/{id}/` |
+| Team | `GET /api/v1/members/`; `GET`, `POST /api/v1/invitations/`; `POST /api/v1/invitations/accept/` |
+| Customers | `GET`, `POST /api/v1/customers/`; `GET`, `PATCH /api/v1/customers/{id}/` |
+| Plans | `GET`, `POST /api/v1/plans/`; `GET`, `PATCH`, `DELETE /api/v1/plans/{id}/` |
+| Subscriptions | `GET`, `POST /api/v1/subscriptions/`; `GET /api/v1/subscriptions/{id}/`; `POST .../{id}/activate/`, `.../{id}/renew/`, `.../{id}/cancel/` |
+| Invoices | `GET /api/v1/invoices/`, `GET /api/v1/invoices/{id}/` |
+| Payments | `GET`, `POST /api/v1/payment-attempts/`; `GET /api/v1/payment-attempts/{id}/` |
+| Provider events | `POST /api/v1/webhooks/payments/` |
 
-### Authentication (`/api/auth`)
-* `POST /api/auth/register/` - Register a user (and create their organization)
-* `POST /api/auth/login/` - Log in and obtain an auth token
+Requests and responses use JSON. Lists return `{next, previous, results}` with
+opaque cursors; the default page size is 25, and `page_size` accepts 1–100.
+Errors use `{code, message, fields}`. Money is a decimal string with its currency;
+timestamps use ISO 8601 with a timezone. Use the documented trailing slashes.
 
-### Accounts (`/api/accounts`)
-* `GET /api/accounts/me/` - Current authenticated user
-* `GET|POST /api/accounts/organizations/` - List / create organizations
-* `GET|POST /api/accounts/customers/` - List / create customers
-* `GET|PATCH /api/accounts/customers/{id}/` - Retrieve / update a customer
-* `GET /api/accounts/members/` - List organization members and roles
-* `GET|POST /api/accounts/invitations/` - List / send invitations
-* `POST /api/accounts/invitations/accept/` - Accept an invitation
-* `GET|POST /api/accounts/keys/` - List / create API keys (service-to-service)
-* `DELETE /api/accounts/keys/{id}/` - Revoke an API key
+User tokens use `Authorization: Token <token>`; service keys use
+`Authorization: Bearer cf_<key>`. A user with several memberships selects a
+project through `X-Organization-Id`. Service keys remain bound to their project.
+Registration creates a user; create an organization separately to obtain its
+initial API key.
 
-### Plans (`/api/plans`)
-* `GET|POST /api/plans/` - List / create plans
-* `GET|PATCH|DELETE /api/plans/{id}/` - Retrieve / update / delete a plan
-
-### Subscriptions (`/api/subscriptions`)
-* `GET|POST /api/subscriptions/` - List / create subscriptions
-* `GET /api/subscriptions/{id}/` - Retrieve a subscription
-* `POST /api/subscriptions/{id}/activate/` - Activate (trial -> active)
-* `POST /api/subscriptions/{id}/renew/` - Renew the billing period
-* `POST /api/subscriptions/{id}/cancel/` - Cancel
-
-### Invoices (`/api/invoices`)
-* `GET /api/invoices/` - List invoices (generated automatically by the subscription lifecycle)
-* `GET /api/invoices/{id}/` - Retrieve an invoice
-
-### Payments (`/api/payments`)
-* `GET|POST /api/payments/attempts/` - List / create payment attempts
-* `GET /api/payments/attempts/{id}/` - Retrieve a payment attempt
-* `POST /api/payments/webhook/` - Provider webhook (idempotent, deduplicated)
+See the [API v1 integration and upgrade notes](docs/api-v1.md) for filters,
+replay behavior, error examples and the breaking changes from unversioned routes.
 
 ## Installation and Launch
 
@@ -282,7 +275,7 @@ payment requests remain available; they count toward the same retry limit.
 Invoice responses expose `attempt_count` (charges prepared, including pending
 and successful charges), `first_failed_at` and `next_retry_at`.
 
-`POST /api/subscriptions/` accepts an optional `Idempotency-Key` header (1–255
+`POST /api/v1/subscriptions/` accepts an optional `Idempotency-Key` header (1–255
 characters), scoped to the project. The first request returns 201; a replay
 with the same customer and plan returns the original subscription with 200,
 even after cancellation. Reusing the key with different ids returns 409. A

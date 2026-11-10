@@ -1,8 +1,21 @@
 from drf_spectacular.extensions import OpenApiAuthenticationExtension
-from rest_framework.authentication import BaseAuthentication
+from rest_framework.authentication import BaseAuthentication, TokenAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
 from accounts.models import ApiKey
+
+
+class RequestTokenAuthentication(TokenAuthentication):
+    def authenticate_header(self, request):
+        return "Bearer" if request.headers.get("Authorization", "").startswith("Bearer ") else "Token"
+
+
+class UserTokenScheme(OpenApiAuthenticationExtension):
+    target_class = "accounts.authentication.RequestTokenAuthentication"
+    name = "tokenAuth"
+
+    def get_security_definition(self, auto_schema):
+        return {"type": "apiKey", "in": "header", "name": "Authorization", "description": "Token <token>"}
 
 
 class ProjectPrincipal:
@@ -45,5 +58,5 @@ class ApiKeyAuthenticationScheme(OpenApiAuthenticationExtension):
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "cf_<secret>",
-            "description": "Service-to-service API key: `Authorization: Bearer cf_<secret>`",
+            "description": "cf_<key>",
         }

@@ -9,7 +9,7 @@ from accounts.models import OrganizationMembership
 from invoices.domain.models import Invoice
 from subscriptions.domain.models import SubscriptionStatus
 
-SUBSCRIPTIONS_URL = "/api/subscriptions/"
+SUBSCRIPTIONS_URL = "/api/v1/subscriptions/"
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
@@ -81,6 +81,7 @@ def test_renew_endpoint_rejects_a_subscription_mid_period(auth_client, subscript
     response = auth_client.post(f"{SUBSCRIPTIONS_URL}{subscription.pk}/renew/")
 
     assert response.status_code == 400
+    assert response.data["code"] == "renewal_not_due"
     assert not Invoice.objects.filter(subscription=subscription).exists()
 
 
@@ -127,12 +128,12 @@ def test_create_on_archived_plan_returns_400(auth_client, customer, plan):
     )
 
     assert response.status_code == 400
-    assert "archived" in str(response.data).lower()
+    assert response.data["code"] == "plan_not_active"
 
 
 def test_delete_plan_with_subscriptions_returns_400(auth_client, plan, subscription):
     # the plan is protected by the subscription fixture: PROTECT must surface as 400
-    response = auth_client.delete(f"/api/plans/{plan.pk}/")
+    response = auth_client.delete(f"/api/v1/plans/{plan.pk}/")
 
     assert response.status_code == 400
     from plans.models import Plan
@@ -150,4 +151,4 @@ def test_created_subscription_appears_in_list(auth_client, customer, plan):
     response = auth_client.get(SUBSCRIPTIONS_URL)
 
     assert response.status_code == 200
-    assert len(response.data) == 1
+    assert len(response.data["results"]) == 1

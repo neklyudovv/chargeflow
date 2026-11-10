@@ -16,11 +16,11 @@ logger = getLogger(__name__)
 
 
 class InvoiceNotPayable(Exception):
-    pass
+    code = "invoice_not_payable"
 
 
 class IdempotencyConflict(Exception):
-    pass
+    code = "idempotency_conflict"
 
 
 _GATEWAYS = {"mock": MockPaymentGateway()}

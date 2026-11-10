@@ -60,7 +60,7 @@ def test_persisted_gateway_snapshot_cannot_be_edited(issued, field, value):
 
 def test_non_ascii_signature_is_a_client_error_without_storing_event(db):
     client = APIClient(raise_request_exception=False)
-    response = client.post('/api/payments/webhook/', b'{}', content_type='application/json', HTTP_X_WEBHOOK_SIGNATURE=f't={int(time.time())},v1=\u00e9')
+    response = client.post('/api/v1/webhooks/payments/', b'{}', content_type='application/json', HTTP_X_WEBHOOK_SIGNATURE=f't={int(time.time())},v1=\u00e9')
     assert response.status_code == 400
 
 

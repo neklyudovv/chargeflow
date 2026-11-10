@@ -15,7 +15,7 @@ from accounts.models import (
 from plans.models import Plan
 from subscriptions.domain.models import Subscription
 
-SUBSCRIPTIONS_URL = "/api/subscriptions/"
+SUBSCRIPTIONS_URL = "/api/v1/subscriptions/"
 
 
 def _build_org(email, name):
@@ -68,7 +68,7 @@ def test_api_key_auth_resolves_organization(org_a):
     response = client.get(SUBSCRIPTIONS_URL)
 
     assert response.status_code == 200
-    assert [row["id"] for row in response.data] == [org_a["subscription"].pk]
+    assert [row["id"] for row in response.data["results"]] == [org_a["subscription"].pk]
 
 
 def test_invalid_api_key_is_rejected(db):
@@ -86,7 +86,7 @@ def test_org_cannot_see_another_orgs_subscriptions(org_a, org_b):
 
     response = client.get(SUBSCRIPTIONS_URL)
 
-    ids = {row["id"] for row in response.data}
+    ids = {row["id"] for row in response.data["results"]}
     assert ids == {org_a["subscription"].pk}
     assert org_b["subscription"].pk not in ids
 
@@ -103,4 +103,4 @@ def test_unresolved_org_returns_empty_not_forbidden(db):
     response = client.get(SUBSCRIPTIONS_URL)
 
     assert response.status_code == 200
-    assert response.data == []
+    assert response.data["results"] == []

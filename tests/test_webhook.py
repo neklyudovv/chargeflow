@@ -114,7 +114,7 @@ def test_http_webhook_uses_the_configured_secret(db, settings, monkeypatch, sign
     digest = hmac.new(secret.encode(), timestamp.encode() + b'.' + body, hashlib.sha256).hexdigest()
     signature = f't={timestamp},v1={digest}'
     response = APIClient().post(
-        '/api/payments/webhook/', body, content_type='application/json',
+        '/api/v1/webhooks/payments/', body, content_type='application/json',
         HTTP_X_WEBHOOK_SIGNATURE=signature,
     )
     assert response.status_code == (200 if sign_with_settings else 400)
@@ -122,18 +122,18 @@ def test_http_webhook_uses_the_configured_secret(db, settings, monkeypatch, sign
 
 
 @pytest.mark.parametrize(
-    "change",
+    "change,error_field",
     [
-        {"provider": "unknown"},
-        {"payload": {"payment_attempt_id": 0, "status": "failed", "provider_charge_id": "charge-invalid"}},
-        {"payload": {"payment_attempt_id": 1, "status": "pending", "provider_charge_id": "charge-invalid"}},
-        {"payload": {"payment_attempt_id": 1, "status": [], "provider_charge_id": "charge-invalid"}},
-        {"payload": {"payment_attempt_id": 1, "status": {}, "provider_charge_id": "charge-invalid"}},
-        {"payload": {"payment_attempt_id": 1, "status": True, "provider_charge_id": "charge-invalid"}},
-        {"payload": {"payment_attempt_id": 1, "status": "failed", "provider_charge_id": []}},
+        ({"provider": "unknown"}, "provider"),
+        ({"payload": {"payment_attempt_id": 0, "status": "failed", "provider_charge_id": "charge-invalid"}}, "payload.payment_attempt_id"),
+        ({"payload": {"payment_attempt_id": 1, "status": "pending", "provider_charge_id": "charge-invalid"}}, "payload.status"),
+        ({"payload": {"payment_attempt_id": 1, "status": [], "provider_charge_id": "charge-invalid"}}, "payload.status"),
+        ({"payload": {"payment_attempt_id": 1, "status": {}, "provider_charge_id": "charge-invalid"}}, "payload.status"),
+        ({"payload": {"payment_attempt_id": 1, "status": True, "provider_charge_id": "charge-invalid"}}, "payload.status"),
+        ({"payload": {"payment_attempt_id": 1, "status": "failed", "provider_charge_id": []}}, "payload.provider_charge_id"),
     ],
 )
-def test_http_webhook_rejects_invalid_gateway_fields(db, settings, change):
+def test_http_webhook_rejects_invalid_gateway_fields(db, settings, change, error_field):
     import hashlib
     import hmac
     import json
@@ -160,10 +160,11 @@ def test_http_webhook_rejects_invalid_gateway_fields(db, settings, change):
         hashlib.sha256,
     ).hexdigest()
     response = APIClient().post(
-        "/api/payments/webhook/",
+        "/api/v1/webhooks/payments/",
         body,
         content_type="application/json",
         HTTP_X_WEBHOOK_SIGNATURE=f"t={timestamp},v1={digest}",
     )
     assert response.status_code == 400
+    assert error_field in response.data["fields"]
     assert not WebhookEvent.objects.exists()

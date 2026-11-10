@@ -17,7 +17,15 @@ from subscriptions.domain.models import (
 
 
 class SubscriptionConflict(Exception):
-    pass
+    def __init__(self, message, code="idempotency_conflict"):
+        self.code = code
+        super().__init__(message)
+
+
+class SubscriptionError(ValueError):
+    def __init__(self, message, code="invalid_request"):
+        self.code = code
+        super().__init__(message)
 
 
 class SubscriptionService:
@@ -59,10 +67,10 @@ class SubscriptionService:
                 replay._idempotent_replay = True
                 return replay
         if Subscription.objects.filter(customer=customer, plan=plan).exclude(status=SubscriptionStatus.CANCELED).exists():
-            raise SubscriptionConflict("A live subscription already exists for this customer and plan.")
+            raise SubscriptionConflict("A live subscription already exists for this customer and plan.", code="subscription_exists")
         plan.full_clean(validate_unique=False, validate_constraints=False)
         if plan.status != PlanStatus.ACTIVE:
-            raise ValueError(f"Cannot subscribe to a plan with status '{plan.status}'")
+            raise SubscriptionError(f"Cannot subscribe to a plan with status '{plan.status}'", code="plan_not_active")
 
         now = timezone.now()
         has_trial = plan.trial_period_days > 0
@@ -104,7 +112,7 @@ class SubscriptionService:
         # subscription goes back to ACTIVE only by paying off its invoices.
         subscription = Subscription.objects.select_for_update().select_related("plan").get(pk=subscription.pk)
         if not SubscriptionService.is_trial_to_activate(subscription):
-            raise ValueError(f"Cannot activate subscription with status '{subscription.status}'")
+            raise SubscriptionError(f"Cannot activate subscription with status '{subscription.status}'", code="invalid_transition")
 
         subscription.transition_to(SubscriptionStatus.ACTIVE)
         start = min(timezone.now(), subscription.current_period_end)
@@ -161,9 +169,9 @@ class SubscriptionService:
         # renewal moves the period forward.
         subscription = Subscription.objects.select_for_update().select_related("plan").get(pk=subscription.pk)
         if subscription.status != SubscriptionStatus.ACTIVE:
-            raise ValueError(f"Cannot renew subscription with status '{subscription.status}'")
+            raise SubscriptionError(f"Cannot renew subscription with status '{subscription.status}'", code="invalid_transition")
         if not SubscriptionService.is_due_for_renewal(subscription):
-            raise ValueError("Cannot renew a subscription before its period has ended")
+            raise SubscriptionError("Cannot renew a subscription before its period has ended", code="renewal_not_due")
 
         anchor_day = subscription.billing_anchor_day or subscription.current_period_start.day
         start = subscription.current_period_end

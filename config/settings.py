@@ -153,13 +153,19 @@ AUTH_USER_MODEL = 'accounts.User'
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        "accounts.authentication.RequestTokenAuthentication",
         "accounts.authentication.ApiKeyAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_SCHEMA_CLASS": "config.schema.PublicSchema",
+    "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "EXCEPTION_HANDLER": "config.api.exception_handler",
+    "DEFAULT_PAGINATION_CLASS": "config.api.CursorPage",
+    "PAGE_SIZE": 25,
+    "DEFAULT_FILTER_BACKENDS": ["config.api.QueryFilters"],
     # Throttling is backed by the shared cache (see CACHES), so counters are
     # enforced across gunicorn workers and instances. The default class covers
     # every route by tenant; auth endpoints override it with a per-IP scope.
@@ -202,13 +208,48 @@ else:
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Chargeflow API",
-    "DESCRIPTION": "Modular Django billing engine - plans, subscriptions, invoices, and payments.",
+    "DESCRIPTION": "",
     "VERSION": "1.0.0",
+    "OAS_VERSION": "3.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "COMPONENT_SPLIT_PATCH": False,
+    "ENUM_ADD_EXPLICIT_BLANK_NULL_CHOICE": True,
+    "ENUM_GENERATE_CHOICE_DESCRIPTION": False,
+    "SCHEMA_PATH_PREFIX": r"/api/v1",
+    "POSTPROCESSING_HOOKS": ["drf_spectacular.hooks.postprocess_schema_enums", "config.schema.contract_components"],
     "ENUM_NAME_OVERRIDES": {
         "RoleEnum": "accounts.models.OrganizationMembership.Role",
+        "SubscriptionStatusEnum": "subscriptions.domain.models.SubscriptionStatus",
+        "CancellationReasonEnum": "subscriptions.domain.models.CancellationReason",
+        "InvoiceStatusEnum": "invoices.domain.models.InvoiceStatus",
+        "PaymentStatusEnum": "payments.domain.models.PaymentStatus",
+        "PlanStatusEnum": "plans.models.PlanStatus",
+        "BillingIntervalEnum": "plans.models.PlanInterval",
+        "ErrorCodeEnum": "config.api.ERROR_CODES",
+        "HealthStatusEnum": ["ok"],
+        "PaymentEventStatusEnum": ["success", "failed"],
+        "InvitationRoleEnum": ["admin", "member"],
+        "ApiKeyScopeEnum": "accounts.models.ApiKey.Scope",
+        "PaymentProviderEnum": ["mock"],
     },
+    "TAGS": [
+        {"name": 'Health'},
+        {"name": 'Authentication'},
+        {"name": 'Account'},
+        {"name": 'Organizations'},
+        {"name": 'API keys'},
+        {"name": 'Team'},
+        {"name": 'Customers'},
+        {"name": 'Plans'},
+        {"name": 'Subscriptions'},
+        {"name": 'Invoices'},
+        {"name": 'Payments'},
+        {"name": 'Provider webhooks'},
+    ],
+    "SWAGGER_UI_SETTINGS": {"deepLinking": True, "displayRequestDuration": True, "docExpansion": "list", "filter": True, "persistAuthorization": False},
 }
+
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOWED_ORIGINS = [

@@ -3,7 +3,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import Invitation, OrganizationMembership, User
 
-ACCEPT_URL = "/api/accounts/invitations/accept/"
+ACCEPT_URL = "/api/v1/invitations/accept/"
 
 
 def test_accept_invitation_matches_email_case_insensitively(organization):
