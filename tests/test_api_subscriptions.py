@@ -81,6 +81,7 @@ def test_renew_endpoint_rejects_a_subscription_mid_period(auth_client, subscript
     response = auth_client.post(f"{SUBSCRIPTIONS_URL}{subscription.pk}/renew/")
 
     assert response.status_code == 400
+    assert response.data["code"] == "renewal_not_due"
     assert not Invoice.objects.filter(subscription=subscription).exists()
 
 
@@ -127,7 +128,7 @@ def test_create_on_archived_plan_returns_400(auth_client, customer, plan):
     )
 
     assert response.status_code == 400
-    assert "archived" in str(response.data).lower()
+    assert response.data["code"] == "plan_not_active"
 
 
 def test_delete_plan_with_subscriptions_returns_400(auth_client, plan, subscription):
