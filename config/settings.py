@@ -247,7 +247,7 @@ SPECTACULAR_SETTINGS = {
         {"name": 'Payments'},
         {"name": 'Provider webhooks'},
     ],
-    "SWAGGER_UI_SETTINGS": {"deepLinking": True, "displayRequestDuration": True, "docExpansion": "none", "filter": True, "persistAuthorization": False},
+    "SWAGGER_UI_SETTINGS": {"deepLinking": True, "displayRequestDuration": True, "docExpansion": "list", "filter": True, "persistAuthorization": False},
 }
 
 
