@@ -51,6 +51,6 @@ def test_signed_webhook_with_wrong_top_level_fields_returns_400(settings, shape)
     timestamp = str(int(time.time()))
     digest = hmac.new(settings.WEBHOOK_SECRET.encode(), timestamp.encode() + b'.' + body, hashlib.sha256).hexdigest()
     client = APIClient(raise_request_exception=False)
-    response = client.post('/api/payments/webhook/', body, content_type='application/json', HTTP_X_WEBHOOK_SIGNATURE=f't={timestamp},v1={digest}')
+    response = client.post('/api/v1/webhooks/payments/', body, content_type='application/json', HTTP_X_WEBHOOK_SIGNATURE=f't={timestamp},v1={digest}')
     assert response.status_code == 400
     assert not WebhookEvent.objects.exists()

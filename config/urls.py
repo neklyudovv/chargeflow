@@ -1,41 +1,36 @@
-"""
-URL configuration for config project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.contrib import admin
 from django.urls import include, path
-from drf_spectacular.views import (
-    SpectacularAPIView,
-    SpectacularRedocView,
-    SpectacularSwaggerView,
-)
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from rest_framework.routers import SimpleRouter
 
-from accounts.api.views import LoginView, RegisterView
-from config.health import health
+from accounts.api.views import AcceptInvitationView, ApiKeyViewSet, CustomerViewSet, InvitationViewSet, LoginView, MemberViewSet, MeView, OrganizationViewSet, RegisterView
+from config.health import HealthView
+from invoices.api.views import InvoiceViewSet
+from payments.api.views import PaymentAttemptViewSet, WebhookView
+from plans.api.views import PlanViewSet
+from subscriptions.api.views import SubscriptionViewSet
+
+router = SimpleRouter()
+router.register("organizations", OrganizationViewSet, basename="organizations")
+router.register("api-keys", ApiKeyViewSet, basename="api-keys")
+router.register("members", MemberViewSet, basename="members")
+router.register("invitations", InvitationViewSet, basename="invitations")
+router.register("customers", CustomerViewSet, basename="customers")
+router.register("plans", PlanViewSet, basename="plans")
+router.register("subscriptions", SubscriptionViewSet, basename="subscriptions")
+router.register("invoices", InvoiceViewSet, basename="invoices")
+router.register("payment-attempts", PaymentAttemptViewSet, basename="payment-attempts")
 
 urlpatterns = [
-    path("health/", health),
+    path("health/", HealthView.as_view(), name="health"),
     path("admin/", admin.site.urls),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
-    path("api/auth/register/", RegisterView.as_view(), name="register"),
-    path("api/auth/login/", LoginView.as_view(), name="login"),
-    path("api/accounts/", include("accounts.api.urls")),
-    path("api/plans/", include("plans.api.urls")),
-    path("api/subscriptions/", include("subscriptions.api.urls")),
-    path("api/invoices/", include("invoices.api.urls")),
-    path("api/payments/", include("payments.api.urls")),
+    path("api/v1/auth/register/", RegisterView.as_view(), name="register"),
+    path("api/v1/auth/login/", LoginView.as_view(), name="login"),
+    path("api/v1/me/", MeView.as_view(), name="me"),
+    path("api/v1/invitations/accept/", AcceptInvitationView.as_view(), name="invitations-accept"),
+    path("api/v1/webhooks/payments/", WebhookView.as_view(), name="payments-webhook"),
+    path("api/v1/", include(router.urls)),
 ]

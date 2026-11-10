@@ -1,123 +1,76 @@
-from django.shortcuts import get_object_or_404
-from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import mixins, status, viewsets
-from rest_framework.authentication import BaseAuthentication
-from rest_framework.parsers import JSONParser
+from django.conf import settings
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiTypes, extend_schema, extend_schema_view
+from rest_framework import mixins, viewsets
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import ProjectAccess
 from accounts.request_context import get_request_organization
-from invoices.domain.models import Invoice
-from payments.api.serializers import (
-    PaymentAttemptCreateSerializer,
-    PaymentAttemptSerializer,
-    WebhookResponseSerializer,
-    WebhookSerializer,
-)
+from config.api import APIError, ErrorResponse, get_idempotency_key
+from payments.api.serializers import CreatePaymentAttemptRequest, PaymentAttemptResponse, PaymentEventRequest, PaymentEventResponse, PaymentFilters
 from payments.application.services import IdempotencyConflict, InvoiceNotPayable, PaymentService
 from payments.domain.models import PaymentAttempt
 from payments.infrastructure.signature import WebhookSignatureError, verify_webhook_signature
 
 
-class PaymentAttemptViewSet(
-    mixins.ListModelMixin,
-    mixins.RetrieveModelMixin,
-    mixins.CreateModelMixin,
-    viewsets.GenericViewSet,
-):
-    serializer_class = PaymentAttemptSerializer
+@extend_schema(tags=["Payments"])
+@extend_schema_view(
+    list=extend_schema(operation_id="listPaymentAttempts", summary="List payment attempts", description="", responses={200: PaymentAttemptResponse(many=True)}),
+    retrieve=extend_schema(operation_id="getPaymentAttempt", summary="Get a payment attempt", description="", responses={200: PaymentAttemptResponse}),
+)
+class PaymentAttemptViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet):
+    serializer_class = PaymentAttemptResponse
     permission_classes = [ProjectAccess]
+    organization_scoped = True
+    timestamp_field = "attempted_at"
+    filter_serializer_class = PaymentFilters
 
     def get_queryset(self):
         org = get_request_organization(self.request)
-        if org is None:
-            return PaymentAttempt.objects.none()
-        return PaymentAttempt.objects.select_related("invoice").filter(
-            organization=org
-        )
+        return PaymentAttempt.objects.select_related("invoice").filter(organization=org) if org is not None else PaymentAttempt.objects.none()
 
     @extend_schema(
-        request=PaymentAttemptCreateSerializer,
-        responses={
-            201: PaymentAttemptSerializer,
-            400: OpenApiTypes.OBJECT,
-            409: OpenApiTypes.OBJECT,
-        },
-        parameters=[
-            OpenApiParameter(
-                name="Idempotency-Key",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.HEADER,
-                required=False,
-                description="Project-scoped client request key",
-            )
-        ],
+        operation_id="createPaymentAttempt", summary="Attempt an invoice payment",
+        description="",
+        request=CreatePaymentAttemptRequest, responses={201: PaymentAttemptResponse, 409: ErrorResponse},
+        parameters=[OpenApiParameter(name="Idempotency-Key", type={"type": "string", "minLength": 1, "maxLength": 255}, location=OpenApiParameter.HEADER, description="")],
+        examples=[OpenApiExample("Pay an invoice", value={"invoice_id": 1}, request_only=True)],
     )
     def create(self, request, *args, **kwargs):
-        org = get_request_organization(request)
-        if org is None:
-            return Response(
-                {"detail": "No organization in scope."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        serializer = PaymentAttemptCreateSerializer(data=request.data)
+        if get_request_organization(request) is None:
+            raise APIError("organization_required", "Select an organization before attempting payment.")
+        serializer = CreatePaymentAttemptRequest(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        invoice = get_object_or_404(
-            Invoice,
-            pk=serializer.validated_data["invoice_id"],
-            organization=org,
-        )
         try:
-            payment = PaymentService.attempt(
-                invoice,
-                idempotency_key=request.headers.get("Idempotency-Key"),
-            )
+            payment = PaymentService.attempt(serializer.validated_data["invoice"], idempotency_key=get_idempotency_key(request))
         except IdempotencyConflict as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+            raise APIError(exc.code, str(exc), status_code=409)
         except InvoiceNotPayable as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(PaymentAttemptSerializer(payment).data, status=status.HTTP_201_CREATED)
+            raise APIError(exc.code, str(exc))
+        return Response(PaymentAttemptResponse(payment).data, status=201)
 
 
 class WebhookView(APIView):
-    # Webhook is called by payment provider - no API key auth needed
-    authentication_classes: list[type[BaseAuthentication]] = []
+    authentication_classes = []
     permission_classes = [AllowAny]
-    parser_classes = [JSONParser]
+    throttle_classes = []
 
     @extend_schema(
-        request=WebhookSerializer,
-        responses={
-            200: WebhookResponseSerializer,
-            400: OpenApiTypes.OBJECT,
-            415: OpenApiTypes.OBJECT,
-        },
-        parameters=[
-            OpenApiParameter(
-                name="X-Webhook-Signature",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.HEADER,
-                required=True,
-                description="t=<unix>,v1=<HMAC-SHA256 of t.raw_body>",
-            )
-        ],
+        operation_id="receivePaymentEvent", tags=["Provider webhooks"], summary="Receive a signed payment event",
+        description="",
+        request=PaymentEventRequest, responses={200: PaymentEventResponse, 503: ErrorResponse}, auth=[],
+        parameters=[OpenApiParameter(name="X-Webhook-Signature", type=OpenApiTypes.STR, location=OpenApiParameter.HEADER, required=True, description="")],
+        examples=[OpenApiExample("Payment settled", value={"provider": "mock", "provider_event_id": "evt_example", "event_type": "payment.updated", "payload": {"payment_attempt_id": 1, "status": "success", "provider_charge_id": "charge_example"}}, request_only=True)],
     )
     def post(self, request):
-        signature = request.headers.get("X-Webhook-Signature", "")
+        if not settings.WEBHOOK_SECRET:
+            raise APIError("service_unavailable", "Payment event verification is temporarily unavailable.", status_code=503)
         try:
-            verify_webhook_signature(request.body, signature)
-        except WebhookSignatureError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        serializer = WebhookSerializer(data=request.data)
+            verify_webhook_signature(request.body, request.headers.get("X-Webhook-Signature", ""))
+        except WebhookSignatureError:
+            raise APIError("invalid_webhook_signature", "Invalid or expired payment event signature.")
+        serializer = PaymentEventRequest(data=request.data)
         serializer.is_valid(raise_exception=True)
-        PaymentService.handle_webhook(
-            event_type=serializer.validated_data["event_type"],
-            payload=serializer.validated_data["payload"],
-            provider=serializer.validated_data["provider"],
-            provider_event_id=serializer.validated_data["provider_event_id"],
-        )
-        return Response({"status": "ok"})
+        PaymentService.handle_webhook(**serializer.validated_data)
+        return Response(PaymentEventResponse({"status": "ok"}).data)

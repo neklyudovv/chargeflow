@@ -1,5 +1,6 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
+from config.api import APIError
 from accounts.authentication import ProjectPrincipal
 from accounts.models import ApiKey, OrganizationMembership
 from accounts.request_context import get_request_organization
@@ -14,7 +15,8 @@ class IsOrgAdmin(BasePermission):
     def has_permission(self, request, view):
         if not request.user.is_authenticated or isinstance(request.user, ProjectPrincipal):
             return False
-        get_request_organization(request)
+        if get_request_organization(request) is None:
+            raise APIError("organization_required", "Select an organization for this operation.")
         membership = getattr(request, "membership", None)
         return membership is not None and membership.role in (
             OrganizationMembership.Role.OWNER, OrganizationMembership.Role.ADMIN

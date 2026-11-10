@@ -27,7 +27,7 @@ SUBSCRIPTION_TRANSITIONS: dict[str, set[str]] = {
 
 
 class InvalidStatusTransition(Exception):
-    pass
+    code = "invalid_transition"
 
 
 class Subscription(models.Model):

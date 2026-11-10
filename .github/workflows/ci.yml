@@ -52,6 +52,11 @@ jobs:
       - name: Check for missing migrations
         run: python manage.py makemigrations --check --dry-run
 
+      - name: Verify the committed API contract
+        run: |
+          python manage.py spectacular --validate --fail-on-warn --file openapi.yaml
+          git diff --exit-code -- openapi.yaml
+
       - name: Run tests with coverage
         run: pytest --cov --cov-report=term-missing --cov-fail-under=70
 

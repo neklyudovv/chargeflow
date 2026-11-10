@@ -22,10 +22,10 @@ pytestmark = pytest.mark.django_db(transaction=True)
 def test_project_admin_can_create_scoped_key(organization, user, role):
     OrganizationMembership.objects.create(organization=organization, user=user, role=role)
     client = client_for(user)
-    response = client.post("/api/accounts/keys/", {"name": "Read only", "scope": "read"}, format="json")
+    response = client.post("/api/v1/api-keys/", {"name": "Read only", "scope": "read"}, format="json")
     assert response.status_code == 201
     assert response.data["scope"] == "read"
-    assert client.delete(f"/api/accounts/keys/{response.data['id']}/").status_code == 204
+    assert client.delete(f"/api/v1/api-keys/{response.data['id']}/").status_code == 204
 
 
 @pytest.mark.parametrize("scope,expected", [("read", 403), ("read_write", 201)])
@@ -33,30 +33,30 @@ def test_api_key_scope_controls_project_mutations(organization, scope, expected)
     key, secret = ApiKey.create_for_organization(organization, scope=scope)
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {secret}")
-    assert client.get("/api/accounts/customers/").status_code == 200
-    response = client.post("/api/accounts/customers/", {"name": "New", "email": "new@example.com"}, format="json")
+    assert client.get("/api/v1/customers/").status_code == 200
+    response = client.post("/api/v1/customers/", {"name": "New", "email": "new@example.com"}, format="json")
     assert response.status_code == expected
-    assert client.post("/api/accounts/keys/", {"scope": "read_write"}, format="json").status_code == 403
-    assert client.get("/api/accounts/members/").status_code == 403
+    assert client.post("/api/v1/api-keys/", {"scope": "read_write"}, format="json").status_code == 403
+    assert client.get("/api/v1/members/").status_code == 403
     key.revoked = True
     key.save(update_fields=["revoked"])
-    assert client.get("/api/plans/").status_code in [401, 403]
+    assert client.get("/api/v1/plans/").status_code in [401, 403]
 
 
 def test_expired_key_is_rejected(organization):
     _, secret = ApiKey.create_for_organization(organization, expires_at=timezone.now() - timedelta(seconds=1))
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {secret}")
-    assert client.get("/api/plans/").status_code in [401, 403]
+    assert client.get("/api/v1/plans/").status_code in [401, 403]
 
 
 @pytest.mark.parametrize("method,path", [
-    ("patch", "/api/accounts/customers/{customer}/"),
-    ("patch", "/api/plans/{plan}/"),
-    ("delete", "/api/plans/{plan}/"),
-    ("post", "/api/subscriptions/{subscription}/activate/"),
-    ("post", "/api/subscriptions/{subscription}/cancel/"),
-    ("post", "/api/subscriptions/{subscription}/renew/"),
+    ("patch", "/api/v1/customers/{customer}/"),
+    ("patch", "/api/v1/plans/{plan}/"),
+    ("delete", "/api/v1/plans/{plan}/"),
+    ("post", "/api/v1/subscriptions/{subscription}/activate/"),
+    ("post", "/api/v1/subscriptions/{subscription}/cancel/"),
+    ("post", "/api/v1/subscriptions/{subscription}/renew/"),
 ])
 def test_member_and_read_key_cannot_change_existing_records(organization, user, customer, plan, subscription, method, path):
     OrganizationMembership.objects.create(organization=organization, user=user, role="member")
@@ -69,7 +69,7 @@ def test_member_and_read_key_cannot_change_existing_records(organization, user, 
     customer.refresh_from_db()
     subscription.refresh_from_db()
     assert subscription.status == "trial"
-    assert client_for(user).get("/api/subscriptions/").status_code == 200
+    assert client_for(user).get("/api/v1/subscriptions/").status_code == 200
 
 
 def test_structural_scope_follows_billing_chain(organization, customer, plan, django_capture_on_commit_callbacks):
@@ -184,16 +184,16 @@ def test_organization_migration_preserves_existing_billing_rows(mismatched):
 @pytest.mark.parametrize("scope", ["invalid", "owner"])
 def test_invalid_key_scope_is_rejected(organization, user, scope):
     OrganizationMembership.objects.create(organization=organization, user=user, role="owner")
-    assert client_for(user).post("/api/accounts/keys/", {"scope": scope}, format="json").status_code == 400
+    assert client_for(user).post("/api/v1/api-keys/", {"scope": scope}, format="json").status_code == 400
 
 
 @pytest.mark.parametrize("role", ["owner", "admin"])
 def test_admin_can_mutate_project_data(organization, user, customer, plan, subscription, role):
     OrganizationMembership.objects.create(organization=organization, user=user, role=role)
     client = client_for(user)
-    assert client.patch(f"/api/accounts/customers/{customer.pk}/", {"name": "Updated"}, format="json").status_code == 200
-    assert client.patch(f"/api/plans/{plan.pk}/", {"name": "Updated"}, format="json").status_code == 200
-    assert client.post(f"/api/subscriptions/{subscription.pk}/cancel/", {}, format="json").status_code == 200
+    assert client.patch(f"/api/v1/customers/{customer.pk}/", {"name": "Updated"}, format="json").status_code == 200
+    assert client.patch(f"/api/v1/plans/{plan.pk}/", {"name": "Updated"}, format="json").status_code == 200
+    assert client.post(f"/api/v1/subscriptions/{subscription.pk}/cancel/", {}, format="json").status_code == 200
 
 
 @pytest.mark.django_db(transaction=True)

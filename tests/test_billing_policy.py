@@ -144,14 +144,14 @@ def test_dunning_skips_locked_subscription(customer, plan, monkeypatch):
 def test_subscription_replay_and_conflicts(api, customer, plan, monkeypatch):
     monkeypatch.setattr(charge_invoice, "delay", lambda invoice_id: None)
     body = {"customer_id": customer.pk, "plan_id": plan.pk}
-    first = api.post("/api/subscriptions/", body, format="json", HTTP_IDEMPOTENCY_KEY="subscribe-1")
+    first = api.post("/api/v1/subscriptions/", body, format="json", HTTP_IDEMPOTENCY_KEY="subscribe-1")
     assert first.status_code == 201
     SubscriptionService.cancel(Subscription.objects.get(pk=first.data["id"]))
-    replay = api.post("/api/subscriptions/", body, format="json", HTTP_IDEMPOTENCY_KEY="subscribe-1")
+    replay = api.post("/api/v1/subscriptions/", body, format="json", HTTP_IDEMPOTENCY_KEY="subscribe-1")
     assert replay.status_code == 200
     assert replay.data["id"] == first.data["id"]
     other = Customer.objects.create(organization=customer.organization, email="other@example.com")
-    conflict = api.post("/api/subscriptions/", {**body, "customer_id": other.pk}, format="json", HTTP_IDEMPOTENCY_KEY="subscribe-1")
+    conflict = api.post("/api/v1/subscriptions/", {**body, "customer_id": other.pk}, format="json", HTTP_IDEMPOTENCY_KEY="subscribe-1")
     assert conflict.status_code == 409
     assert Subscription.objects.count() == 1
     assert Invoice.objects.count() == 1
@@ -160,7 +160,7 @@ def test_subscription_replay_and_conflicts(api, customer, plan, monkeypatch):
 @pytest.mark.parametrize("status", ["trial", "active", "overdue"])
 def test_live_subscription_duplicate_is_rejected(api, subscription, status):
     Subscription.objects.filter(pk=subscription.pk).update(status=status)
-    response = api.post("/api/subscriptions/", {"customer_id": subscription.customer_id, "plan_id": subscription.plan_id}, format="json")
+    response = api.post("/api/v1/subscriptions/", {"customer_id": subscription.customer_id, "plan_id": subscription.plan_id}, format="json")
     assert response.status_code == 409
     assert Subscription.objects.count() == 1
 
@@ -190,9 +190,9 @@ def test_concurrent_subscription_replay_creates_one_invoice(customer, plan, monk
 
 @pytest.mark.parametrize("field,value", [("price", "-0.01"), ("currency", "zz"), ("currency", "ZZZ"), ("trial_period_days", -1)])
 def test_plan_validation_rejects_invalid_api_values(api, plan, field, value):
-    response = api.patch(f"/api/plans/{plan.pk}/", {field: value}, format="json")
+    response = api.patch(f"/api/v1/plans/{plan.pk}/", {field: value}, format="json")
     assert response.status_code == 400
-    assert field in response.data
+    assert field in response.data["fields"]
 
 
 @pytest.mark.parametrize("field,value", [("price", "-0.01"), ("currency", "ZZZ"), ("trial_period_days", -1), ("interval", "fortnight")])
@@ -205,20 +205,20 @@ def test_plan_validation_rejects_invalid_model_values(plan, field, value):
 def test_subscription_keys_are_scoped_to_project(api, customer, plan, organization, monkeypatch):
     monkeypatch.setattr(charge_invoice, "delay", lambda invoice_id: None)
     body = {"customer_id": customer.pk, "plan_id": plan.pk}
-    first = api.post("/api/subscriptions/", body, format="json", HTTP_IDEMPOTENCY_KEY="shared")
+    first = api.post("/api/v1/subscriptions/", body, format="json", HTTP_IDEMPOTENCY_KEY="shared")
     other = Organization.objects.create(owner=organization.owner, name="Other")
     other_customer = Customer.objects.create(organization=other, email="other@example.com")
     other_plan = Plan.objects.create(organization=other, name="Other", price="1.00")
     _, secret = ApiKey.create_for_organization(other, scope="read_write")
     api.credentials(HTTP_AUTHORIZATION=f"Bearer {secret}")
-    second = api.post("/api/subscriptions/", {"customer_id": other_customer.pk, "plan_id": other_plan.pk}, format="json", HTTP_IDEMPOTENCY_KEY="shared")
+    second = api.post("/api/v1/subscriptions/", {"customer_id": other_customer.pk, "plan_id": other_plan.pk}, format="json", HTTP_IDEMPOTENCY_KEY="shared")
     assert first.status_code == second.status_code == 201
     assert first.data["id"] != second.data["id"]
 
 
 @pytest.mark.parametrize("key", ["", " ", "k" * 256])
 def test_invalid_subscription_key_is_a_client_error(api, customer, plan, key):
-    response = api.post("/api/subscriptions/", {"customer_id": customer.pk, "plan_id": plan.pk}, format="json", HTTP_IDEMPOTENCY_KEY=key)
+    response = api.post("/api/v1/subscriptions/", {"customer_id": customer.pk, "plan_id": plan.pk}, format="json", HTTP_IDEMPOTENCY_KEY=key)
     assert response.status_code == 400
     assert not Subscription.objects.exists()
 

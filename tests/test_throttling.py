@@ -6,9 +6,9 @@ from rest_framework.test import APIClient
 
 from accounts.models import OrganizationMembership
 
-REGISTER_URL = "/api/auth/register/"
-LOGIN_URL = "/api/auth/login/"
-SUBSCRIPTIONS_URL = "/api/subscriptions/"
+REGISTER_URL = "/api/v1/auth/register/"
+LOGIN_URL = "/api/v1/auth/login/"
+SUBSCRIPTIONS_URL = "/api/v1/subscriptions/"
 
 
 @pytest.fixture

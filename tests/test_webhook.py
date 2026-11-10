@@ -114,7 +114,7 @@ def test_http_webhook_uses_the_configured_secret(db, settings, monkeypatch, sign
     digest = hmac.new(secret.encode(), timestamp.encode() + b'.' + body, hashlib.sha256).hexdigest()
     signature = f't={timestamp},v1={digest}'
     response = APIClient().post(
-        '/api/payments/webhook/', body, content_type='application/json',
+        '/api/v1/webhooks/payments/', body, content_type='application/json',
         HTTP_X_WEBHOOK_SIGNATURE=signature,
     )
     assert response.status_code == (200 if sign_with_settings else 400)
@@ -160,7 +160,7 @@ def test_http_webhook_rejects_invalid_gateway_fields(db, settings, change, error
         hashlib.sha256,
     ).hexdigest()
     response = APIClient().post(
-        "/api/payments/webhook/",
+        "/api/v1/webhooks/payments/",
         body,
         content_type="application/json",
         HTTP_X_WEBHOOK_SIGNATURE=f"t={timestamp},v1={digest}",

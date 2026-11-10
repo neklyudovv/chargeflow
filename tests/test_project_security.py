@@ -31,11 +31,11 @@ def client_for(user):
 
 
 @pytest.mark.parametrize("method,path,data", [
-    ("get", "/api/accounts/me/", None),
-    ("get", "/api/accounts/organizations/", None),
-    ("post", "/api/accounts/organizations/", {"name": "forged"}),
-    ("get", "/api/accounts/invitations/", None),
-    ("post", "/api/accounts/invitations/accept/", {"token": "invalid"}),
+    ("get", "/api/v1/me/", None),
+    ("get", "/api/v1/organizations/", None),
+    ("post", "/api/v1/organizations/", {"name": "forged"}),
+    ("get", "/api/v1/invitations/", None),
+    ("post", "/api/v1/invitations/accept/", {"token": "invalid"}),
 ])
 def test_api_key_cannot_act_as_a_human(project, method, path, data):
     _, key = ApiKey.create_for_organization(project[0])
@@ -45,11 +45,11 @@ def test_api_key_cannot_act_as_a_human(project, method, path, data):
 
 
 @pytest.mark.parametrize("path,data", [
-    ("/api/accounts/keys/", {"name": "escalation"}),
-    ("/api/accounts/customers/", {"email": "new@example.com", "name": "New"}),
-    ("/api/plans/", {"name": "New", "price": "1.00", "currency": "USD", "interval": "month"}),
-    ("/api/subscriptions/", {"customer_id": 1, "plan_id": 1}),
-    ("/api/payments/attempts/", {"invoice_id": 1}),
+    ("/api/v1/api-keys/", {"name": "escalation"}),
+    ("/api/v1/customers/", {"email": "new@example.com", "name": "New"}),
+    ("/api/v1/plans/", {"name": "New", "price": "1.00", "currency": "USD", "interval": "month"}),
+    ("/api/v1/subscriptions/", {"customer_id": 1, "plan_id": 1}),
+    ("/api/v1/payment-attempts/", {"invoice_id": 1}),
 ])
 def test_member_cannot_mutate_project(project, path, data):
     member = User.objects.create_user(username="member@example.com", email="member@example.com", password="test-password")
@@ -61,7 +61,7 @@ def test_member_cannot_revoke_key(project):
     key, _ = ApiKey.create_for_organization(project[0])
     member = User.objects.create_user(username="member@example.com", email="member@example.com", password="test-password")
     OrganizationMembership.objects.create(organization=project[0], user=member, role="member")
-    assert client_for(member).delete(f"/api/accounts/keys/{key.pk}/").status_code == 403
+    assert client_for(member).delete(f"/api/v1/api-keys/{key.pk}/").status_code == 403
     key.refresh_from_db()
     assert not key.revoked
 
@@ -70,7 +70,7 @@ def test_api_key_is_not_the_owner_principal(project):
     _, key = ApiKey.create_for_organization(project[0])
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {key}")
-    response = client.get("/api/plans/")
+    response = client.get("/api/v1/plans/")
     assert response.status_code == 200
     principal = response.wsgi_request.user
     assert principal != project[0].owner
@@ -102,11 +102,11 @@ def test_idempotency_key_reuse_on_different_invoice_is_conflict(project):
     second = issue_invoice(project[3])
     client = client_for(project[0].owner)
     headers = {"HTTP_IDEMPOTENCY_KEY": "same-request"}
-    response = client.post("/api/payments/attempts/", {"invoice_id": first.pk}, format="json", **headers)
+    response = client.post("/api/v1/payment-attempts/", {"invoice_id": first.pk}, format="json", **headers)
     assert response.status_code == 201
-    replay = client.post("/api/payments/attempts/", {"invoice_id": first.pk}, format="json", **headers)
+    replay = client.post("/api/v1/payment-attempts/", {"invoice_id": first.pk}, format="json", **headers)
     assert replay.status_code == 201
     assert replay.data["id"] == response.data["id"]
-    conflict = client.post("/api/payments/attempts/", {"invoice_id": second.pk}, format="json", **headers)
+    conflict = client.post("/api/v1/payment-attempts/", {"invoice_id": second.pk}, format="json", **headers)
     assert conflict.status_code == 409
     assert not PaymentAttempt.objects.filter(invoice=second).exists()

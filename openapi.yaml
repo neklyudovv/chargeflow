@@ -1,0 +1,6503 @@
+openapi: 3.1.0
+info:
+  title: Chargeflow API
+  version: 1.0.0
+paths:
+  /api/v1/api-keys/:
+    get:
+      operationId: listApiKeys
+      summary: List active API keys
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - name: cursor
+        required: false
+        in: query
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+      - in: query
+        name: scope
+        schema:
+          enum:
+          - read
+          - read_write
+          type: string
+          minLength: 1
+      tags:
+      - API keys
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyPage'
+              examples:
+                Example:
+                  value:
+                    next: null
+                    previous: null
+                    results:
+                    - id: 1
+                      name: Reporting
+                      prefix: cf_example
+                      created_at: '2030-01-15T12:00:00Z'
+                      expires_at: null
+                      revoked: false
+                      scope: read
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+    post:
+      operationId: createApiKey
+      summary: Create an API key
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      tags:
+      - API keys
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyRequest'
+            examples:
+              Read-onlyIntegration:
+                value:
+                  name: Reporting
+                  scope: read
+                summary: Read-only integration
+      security:
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyCreatedResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    name: Reporting
+                    prefix: cf_example
+                    created_at: '2030-01-15T12:00:00Z'
+                    expires_at: null
+                    revoked: false
+                    scope: read
+                    key: cf_example_not_a_real_key
+          description: Created
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/api-keys/{id}/:
+    delete:
+      operationId: revokeApiKey
+      summary: Revoke an API key
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this api key.
+        required: true
+      tags:
+      - API keys
+      security:
+      - tokenAuth: []
+      responses:
+        '204':
+          description: No Content
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_found
+                    message: Resource not found.
+                    fields: {}
+          description: Not Found
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/auth/login/:
+    post:
+      operationId: login
+      summary: Obtain a user token
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              SignIn:
+                value:
+                  email: owner@example.com
+                  password: example-password-replace-before-use
+                summary: Sign in
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              examples:
+                Example:
+                  value:
+                    token: example-user-token
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+  /api/v1/auth/register/:
+    post:
+      operationId: register
+      summary: Register a user
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              RegisterAUser:
+                value:
+                  email: owner@example.com
+                  password: example-password-replace-before-use
+                summary: Register a user
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+              examples:
+                Example:
+                  value:
+                    token: example-user-token
+                    user:
+                      id: 1
+                      email: owner@example.com
+          description: Created
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+  /api/v1/customers/:
+    get:
+      operationId: listCustomers
+      summary: List customers
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - name: cursor
+        required: false
+        in: query
+        schema:
+          type: string
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - name: page_size
+        required: false
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+      tags:
+      - Customers
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerPage'
+              examples:
+                Example:
+                  value:
+                    next: null
+                    previous: null
+                    results:
+                    - id: 1
+                      email: customer@example.com
+                      name: Example Customer
+                      provider_customer_id: ''
+                      provider_payment_method_id: ''
+                      created_at: '2030-01-15T12:00:00Z'
+                      updated_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+    post:
+      operationId: createCustomer
+      summary: Create a customer
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      tags:
+      - Customers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerRequest'
+            examples:
+              Customer:
+                value:
+                  email: customer@example.com
+                  name: Example Customer
+        required: true
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    email: customer@example.com
+                    name: Example Customer
+                    provider_customer_id: ''
+                    provider_payment_method_id: ''
+                    created_at: '2030-01-15T12:00:00Z'
+                    updated_at: '2030-01-15T12:00:00Z'
+          description: Created
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/customers/{id}/:
+    get:
+      operationId: getCustomer
+      summary: Get a customer
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this customer.
+        required: true
+      tags:
+      - Customers
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    email: customer@example.com
+                    name: Example Customer
+                    provider_customer_id: ''
+                    provider_payment_method_id: ''
+                    created_at: '2030-01-15T12:00:00Z'
+                    updated_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_found
+                    message: Resource not found.
+                    fields: {}
+          description: Not Found
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+    patch:
+      operationId: updateCustomer
+      summary: Update a customer
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this customer.
+        required: true
+      tags:
+      - Customers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCustomerRequest'
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    email: customer@example.com
+                    name: Example Customer
+                    provider_customer_id: ''
+                    provider_payment_method_id: ''
+                    created_at: '2030-01-15T12:00:00Z'
+                    updated_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_found
+                    message: Resource not found.
+                    fields: {}
+          description: Not Found
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/invitations/:
+    get:
+      operationId: listInvitations
+      summary: List pending invitations
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - name: cursor
+        required: false
+        in: query
+        schema:
+          type: string
+      - in: query
+        name: email
+        schema:
+          type: string
+          format: email
+          minLength: 1
+      - name: page_size
+        required: false
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+      tags:
+      - Team
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationPage'
+              examples:
+                Example:
+                  value:
+                    next: null
+                    previous: null
+                    results:
+                    - id: 1
+                      email: member@example.com
+                      role: member
+                      expires_at: '2030-01-22T12:00:00Z'
+                      accepted_at: null
+                      created_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+    post:
+      operationId: createInvitation
+      summary: Invite a team member
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      tags:
+      - Team
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvitationRequest'
+            examples:
+              InviteAMember:
+                value:
+                  email: member@example.com
+                  role: member
+                summary: Invite a member
+        required: true
+      security:
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationCreatedResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    email: member@example.com
+                    role: member
+                    expires_at: '2030-01-22T12:00:00Z'
+                    accepted_at: null
+                    created_at: '2030-01-15T12:00:00Z'
+                    token: example-invitation-token
+          description: Created
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/invitations/accept/:
+    post:
+      operationId: acceptInvitation
+      summary: Accept an invitation
+      tags:
+      - Team
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AcceptInvitationRequest'
+        required: true
+      security:
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    user_email: member@example.com
+                    role: member
+                    joined_at: '2030-01-15T12:00:00Z'
+          description: Created
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/invoices/:
+    get:
+      operationId: listInvoices
+      summary: List invoices
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: currency
+        schema:
+          type: string
+          minLength: 1
+          pattern: ^[A-Z]{3}$
+      - name: cursor
+        required: false
+        in: query
+        schema:
+          type: string
+      - in: query
+        name: customer_id
+        schema:
+          type: integer
+          minimum: 1
+      - name: page_size
+        required: false
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+      - in: query
+        name: status
+        schema:
+          enum:
+          - draft
+          - issued
+          - paid
+          - failed
+          - overdue
+          - canceled
+          type: string
+          minLength: 1
+      - in: query
+        name: subscription_id
+        schema:
+          type: integer
+          minimum: 1
+      tags:
+      - Invoices
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoicePage'
+              examples:
+                Example:
+                  value:
+                    next: null
+                    previous: null
+                    results:
+                    - id: 1
+                      subscription_id: 1
+                      status: paid
+                      total: '19.99'
+                      currency: USD
+                      period_start: '2030-01-15T12:00:00Z'
+                      period_end: '2030-02-15T12:00:00Z'
+                      first_failed_at: null
+                      next_retry_at: null
+                      attempt_count: 1
+                      issued_at: '2030-01-15T12:00:00Z'
+                      paid_at: '2030-01-15T12:00:00Z'
+                      created_at: '2030-01-15T12:00:00Z'
+                      updated_at: '2030-01-15T12:00:00Z'
+                      lines:
+                      - id: 1
+                        description: Pro monthly subscription
+                        amount: '19.99'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/invoices/{id}/:
+    get:
+      operationId: getInvoice
+      summary: Get an invoice
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this invoice.
+        required: true
+      tags:
+      - Invoices
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    subscription_id: 1
+                    status: paid
+                    total: '19.99'
+                    currency: USD
+                    period_start: '2030-01-15T12:00:00Z'
+                    period_end: '2030-02-15T12:00:00Z'
+                    first_failed_at: null
+                    next_retry_at: null
+                    attempt_count: 1
+                    issued_at: '2030-01-15T12:00:00Z'
+                    paid_at: '2030-01-15T12:00:00Z'
+                    created_at: '2030-01-15T12:00:00Z'
+                    updated_at: '2030-01-15T12:00:00Z'
+                    lines:
+                    - id: 1
+                      description: Pro monthly subscription
+                      amount: '19.99'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_found
+                    message: Resource not found.
+                    fields: {}
+          description: Not Found
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/me/:
+    get:
+      operationId: getCurrentAccount
+      summary: Get the current account
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      tags:
+      - Account
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+              examples:
+                Example:
+                  value:
+                    user:
+                      id: 1
+                      email: owner@example.com
+                    organization:
+                      id: 1
+                      name: Production
+                      created_at: '2030-01-15T12:00:00Z'
+                      updated_at: '2030-01-15T12:00:00Z'
+                      my_role: owner
+                    role: owner
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/members/:
+    get:
+      operationId: listMembers
+      summary: List organization members
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - name: cursor
+        required: false
+        in: query
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+      - in: query
+        name: role
+        schema:
+          enum:
+          - owner
+          - admin
+          - member
+          type: string
+          minLength: 1
+      tags:
+      - Team
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipPage'
+              examples:
+                Example:
+                  value:
+                    next: null
+                    previous: null
+                    results:
+                    - id: 1
+                      user_email: member@example.com
+                      role: member
+                      joined_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/organizations/:
+    get:
+      operationId: listOrganizations
+      summary: List your organizations
+      parameters:
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - name: cursor
+        required: false
+        in: query
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+      tags:
+      - Organizations
+      security:
+      - tokenAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationPage'
+              examples:
+                Example:
+                  value:
+                    next: null
+                    previous: null
+                    results:
+                    - id: 1
+                      name: Production
+                      created_at: '2030-01-15T12:00:00Z'
+                      updated_at: '2030-01-15T12:00:00Z'
+                      my_role: owner
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+    post:
+      operationId: createOrganization
+      summary: Create an organization
+      tags:
+      - Organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationRequest'
+            examples:
+              NewProject:
+                value:
+                  name: Production
+                summary: New project
+        required: true
+      security:
+      - tokenAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationCreatedResponse'
+              examples:
+                Example:
+                  value:
+                    organization:
+                      id: 1
+                      name: Production
+                      created_at: '2030-01-15T12:00:00Z'
+                      updated_at: '2030-01-15T12:00:00Z'
+                      my_role: owner
+                    api_key:
+                      id: 1
+                      name: Reporting
+                      prefix: cf_example
+                      created_at: '2030-01-15T12:00:00Z'
+                      expires_at: null
+                      revoked: false
+                      scope: read
+                      key: cf_example_not_a_real_key
+          description: Created
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/payment-attempts/:
+    get:
+      operationId: listPaymentAttempts
+      summary: List payment attempts
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - name: cursor
+        required: false
+        in: query
+        schema:
+          type: string
+      - in: query
+        name: invoice_id
+        schema:
+          type: integer
+          minimum: 1
+      - in: query
+        name: needs_reconciliation
+        schema:
+          type: boolean
+      - name: page_size
+        required: false
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+      - in: query
+        name: status
+        schema:
+          enum:
+          - pending
+          - success
+          - failed
+          type: string
+          minLength: 1
+      tags:
+      - Payments
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentAttemptPage'
+              examples:
+                Example:
+                  value:
+                    next: null
+                    previous: null
+                    results:
+                    - id: 1
+                      invoice_id: 1
+                      status: success
+                      amount: '19.99'
+                      currency: USD
+                      provider: mock
+                      provider_charge_id: mock_example
+                      attempted_at: '2030-01-15T12:00:00Z'
+                      needs_reconciliation: false
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+    post:
+      operationId: createPaymentAttempt
+      summary: Attempt an invoice payment
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 255
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      tags:
+      - Payments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentAttemptRequest'
+            examples:
+              PayAnInvoice:
+                value:
+                  invoice_id: 1
+                summary: Pay an invoice
+        required: true
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentAttemptResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    invoice_id: 1
+                    status: success
+                    amount: '19.99'
+                    currency: USD
+                    provider: mock
+                    provider_charge_id: mock_example
+                    attempted_at: '2030-01-15T12:00:00Z'
+                    needs_reconciliation: false
+          description: Created
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: idempotency_conflict
+                    message: The key is already bound to another request.
+                    fields: {}
+          description: Conflict
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/payment-attempts/{id}/:
+    get:
+      operationId: getPaymentAttempt
+      summary: Get a payment attempt
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this payment attempt.
+        required: true
+      tags:
+      - Payments
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentAttemptResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    invoice_id: 1
+                    status: success
+                    amount: '19.99'
+                    currency: USD
+                    provider: mock
+                    provider_charge_id: mock_example
+                    attempted_at: '2030-01-15T12:00:00Z'
+                    needs_reconciliation: false
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_found
+                    message: Resource not found.
+                    fields: {}
+          description: Not Found
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/plans/:
+    get:
+      operationId: listPlans
+      summary: List plans
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: currency
+        schema:
+          enum:
+          - AED
+          - AFN
+          - ALL
+          - AMD
+          - AOA
+          - ARS
+          - AUD
+          - AWG
+          - AZN
+          - BAM
+          - BBD
+          - BDT
+          - BHD
+          - BIF
+          - BMD
+          - BND
+          - BOB
+          - BOV
+          - BRL
+          - BSD
+          - BTN
+          - BWP
+          - BYN
+          - BZD
+          - CAD
+          - CDF
+          - CHE
+          - CHF
+          - CHW
+          - CLF
+          - CLP
+          - CNY
+          - COP
+          - COU
+          - CRC
+          - CUP
+          - CVE
+          - CZK
+          - DJF
+          - DKK
+          - DOP
+          - DZD
+          - EGP
+          - ERN
+          - ETB
+          - EUR
+          - FJD
+          - FKP
+          - GBP
+          - GEL
+          - GHS
+          - GIP
+          - GMD
+          - GNF
+          - GTQ
+          - GYD
+          - HKD
+          - HNL
+          - HTG
+          - HUF
+          - IDR
+          - ILS
+          - INR
+          - IQD
+          - IRR
+          - ISK
+          - JMD
+          - JOD
+          - JPY
+          - KES
+          - KGS
+          - KHR
+          - KMF
+          - KPW
+          - KRW
+          - KWD
+          - KYD
+          - KZT
+          - LAK
+          - LBP
+          - LKR
+          - LRD
+          - LSL
+          - LYD
+          - MAD
+          - MDL
+          - MGA
+          - MKD
+          - MMK
+          - MNT
+          - MOP
+          - MRU
+          - MUR
+          - MVR
+          - MWK
+          - MXN
+          - MXV
+          - MYR
+          - MZN
+          - NAD
+          - NGN
+          - NIO
+          - NOK
+          - NPR
+          - NZD
+          - OMR
+          - PAB
+          - PEN
+          - PGK
+          - PHP
+          - PKR
+          - PLN
+          - PYG
+          - QAR
+          - RON
+          - RSD
+          - RUB
+          - RWF
+          - SAR
+          - SBD
+          - SCR
+          - SDG
+          - SEK
+          - SGD
+          - SHP
+          - SLE
+          - SOS
+          - SRD
+          - SSP
+          - STN
+          - SVC
+          - SYP
+          - SZL
+          - THB
+          - TJS
+          - TMT
+          - TND
+          - TOP
+          - TRY
+          - TTD
+          - TWD
+          - TZS
+          - UAH
+          - UGX
+          - USD
+          - USN
+          - UYI
+          - UYU
+          - UYW
+          - UZS
+          - VED
+          - VES
+          - VND
+          - VUV
+          - WST
+          - XAD
+          - XAF
+          - XAG
+          - XAU
+          - XBA
+          - XBB
+          - XBC
+          - XBD
+          - XCD
+          - XCG
+          - XDR
+          - XOF
+          - XPD
+          - XPF
+          - XPT
+          - XSU
+          - XTS
+          - XUA
+          - XXX
+          - YER
+          - ZAR
+          - ZMW
+          - ZWG
+          type: string
+          minLength: 1
+      - name: cursor
+        required: false
+        in: query
+        schema:
+          type: string
+      - name: page_size
+        required: false
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+      - in: query
+        name: status
+        schema:
+          enum:
+          - active
+          - archived
+          type: string
+          minLength: 1
+      tags:
+      - Plans
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanPage'
+              examples:
+                Example:
+                  value:
+                    next: null
+                    previous: null
+                    results:
+                    - id: 1
+                      name: Pro
+                      description: Monthly subscription
+                      price: '19.99'
+                      currency: USD
+                      status: active
+                      interval: month
+                      trial_period_days: 0
+                      created_at: '2030-01-15T12:00:00Z'
+                      updated_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+    post:
+      operationId: createPlan
+      summary: Create a plan
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      tags:
+      - Plans
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlanRequest'
+            examples:
+              MonthlyPlan:
+                value:
+                  name: Pro
+                  price: '19.99'
+                  currency: USD
+                  interval: month
+                  trial_period_days: 7
+                summary: Monthly plan
+        required: true
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    name: Pro
+                    description: Monthly subscription
+                    price: '19.99'
+                    currency: USD
+                    status: active
+                    interval: month
+                    trial_period_days: 0
+                    created_at: '2030-01-15T12:00:00Z'
+                    updated_at: '2030-01-15T12:00:00Z'
+          description: Created
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/plans/{id}/:
+    get:
+      operationId: getPlan
+      summary: Get a plan
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this plan.
+        required: true
+      tags:
+      - Plans
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    name: Pro
+                    description: Monthly subscription
+                    price: '19.99'
+                    currency: USD
+                    status: active
+                    interval: month
+                    trial_period_days: 0
+                    created_at: '2030-01-15T12:00:00Z'
+                    updated_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_found
+                    message: Resource not found.
+                    fields: {}
+          description: Not Found
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+    patch:
+      operationId: updatePlan
+      summary: Update or archive a plan
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this plan.
+        required: true
+      tags:
+      - Plans
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePlanRequest'
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    name: Pro
+                    description: Monthly subscription
+                    price: '19.99'
+                    currency: USD
+                    status: active
+                    interval: month
+                    trial_period_days: 0
+                    created_at: '2030-01-15T12:00:00Z'
+                    updated_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_found
+                    message: Resource not found.
+                    fields: {}
+          description: Not Found
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+    delete:
+      operationId: deletePlan
+      summary: Delete an unused plan
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this plan.
+        required: true
+      tags:
+      - Plans
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '204':
+          description: No Content
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_found
+                    message: Resource not found.
+                    fields: {}
+          description: Not Found
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/subscriptions/:
+    get:
+      operationId: listSubscriptions
+      summary: List subscriptions
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: query
+        name: created_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: created_before
+        schema:
+          type: string
+          format: date-time
+      - name: cursor
+        required: false
+        in: query
+        schema:
+          type: string
+      - in: query
+        name: customer_id
+        schema:
+          type: integer
+          minimum: 1
+      - name: page_size
+        required: false
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+      - in: query
+        name: plan_id
+        schema:
+          type: integer
+          minimum: 1
+      - in: query
+        name: status
+        schema:
+          enum:
+          - trial
+          - active
+          - overdue
+          - canceled
+          type: string
+          minLength: 1
+      tags:
+      - Subscriptions
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionPage'
+              examples:
+                Example:
+                  value:
+                    next: null
+                    previous: null
+                    results:
+                    - id: 1
+                      customer_id: 1
+                      plan_id: 1
+                      status: active
+                      current_period_start: '2030-01-15T12:00:00Z'
+                      current_period_end: '2030-02-15T12:00:00Z'
+                      canceled_at: null
+                      canceled_reason: null
+                      created_at: '2030-01-15T12:00:00Z'
+                      updated_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+    post:
+      operationId: createSubscription
+      summary: Create a subscription
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 255
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      tags:
+      - Subscriptions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubscriptionRequest'
+            examples:
+              SubscribeACustomer:
+                value:
+                  customer_id: 1
+                  plan_id: 1
+                summary: Subscribe a customer
+        required: true
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    customer_id: 1
+                    plan_id: 1
+                    status: active
+                    current_period_start: '2030-01-15T12:00:00Z'
+                    current_period_end: '2030-02-15T12:00:00Z'
+                    canceled_at: null
+                    canceled_reason: null
+                    created_at: '2030-01-15T12:00:00Z'
+                    updated_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    customer_id: 1
+                    plan_id: 1
+                    status: active
+                    current_period_start: '2030-01-15T12:00:00Z'
+                    current_period_end: '2030-02-15T12:00:00Z'
+                    canceled_at: null
+                    canceled_reason: null
+                    created_at: '2030-01-15T12:00:00Z'
+                    updated_at: '2030-01-15T12:00:00Z'
+          description: Created
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: idempotency_conflict
+                    message: The key is already bound to another request.
+                    fields: {}
+          description: Conflict
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/subscriptions/{id}/:
+    get:
+      operationId: getSubscription
+      summary: Get a subscription
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this subscription.
+        required: true
+      tags:
+      - Subscriptions
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    customer_id: 1
+                    plan_id: 1
+                    status: active
+                    current_period_start: '2030-01-15T12:00:00Z'
+                    current_period_end: '2030-02-15T12:00:00Z'
+                    canceled_at: null
+                    canceled_reason: null
+                    created_at: '2030-01-15T12:00:00Z'
+                    updated_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_found
+                    message: Resource not found.
+                    fields: {}
+          description: Not Found
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/subscriptions/{id}/activate/:
+    post:
+      operationId: activateSubscription
+      summary: Activate a trial subscription
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this subscription.
+        required: true
+      tags:
+      - Subscriptions
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    customer_id: 1
+                    plan_id: 1
+                    status: active
+                    current_period_start: '2030-01-15T12:00:00Z'
+                    current_period_end: '2030-02-15T12:00:00Z'
+                    canceled_at: null
+                    canceled_reason: null
+                    created_at: '2030-01-15T12:00:00Z'
+                    updated_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_found
+                    message: Resource not found.
+                    fields: {}
+          description: Not Found
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/subscriptions/{id}/cancel/:
+    post:
+      operationId: cancelSubscription
+      summary: Cancel a subscription
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this subscription.
+        required: true
+      tags:
+      - Subscriptions
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    customer_id: 1
+                    plan_id: 1
+                    status: active
+                    current_period_start: '2030-01-15T12:00:00Z'
+                    current_period_end: '2030-02-15T12:00:00Z'
+                    canceled_at: null
+                    canceled_reason: null
+                    created_at: '2030-01-15T12:00:00Z'
+                    updated_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_found
+                    message: Resource not found.
+                    fields: {}
+          description: Not Found
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/subscriptions/{id}/renew/:
+    post:
+      operationId: renewSubscription
+      summary: Renew an expired subscription
+      parameters:
+      - in: header
+        name: X-Organization-Id
+        schema:
+          type: integer
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this subscription.
+        required: true
+      tags:
+      - Subscriptions
+      security:
+      - tokenAuth: []
+      - ApiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+              examples:
+                Example:
+                  value:
+                    id: 1
+                    customer_id: 1
+                    plan_id: 1
+                    status: active
+                    current_period_start: '2030-01-15T12:00:00Z'
+                    current_period_end: '2030-02-15T12:00:00Z'
+                    canceled_at: null
+                    canceled_reason: null
+                    created_at: '2030-01-15T12:00:00Z'
+                    updated_at: '2030-01-15T12:00:00Z'
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_found
+                    message: Resource not found.
+                    fields: {}
+          description: Not Found
+        '429':
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: throttled
+                    message: Request was throttled.
+                    fields: {}
+          description: Too Many Requests
+        '401':
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_authenticated
+                    message: Authentication credentials were not provided.
+                    fields: {}
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: permission_denied
+                    message: You do not have permission to perform this action.
+                    fields: {}
+          description: Forbidden
+  /api/v1/webhooks/payments/:
+    post:
+      operationId: receivePaymentEvent
+      summary: Receive a signed payment event
+      parameters:
+      - in: header
+        name: X-Webhook-Signature
+        schema:
+          type: string
+        required: true
+      tags:
+      - Provider webhooks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentEventRequest'
+            examples:
+              PaymentSettled:
+                value:
+                  provider: mock
+                  provider_event_id: evt_example
+                  event_type: payment.updated
+                  payload:
+                    payment_attempt_id: 1
+                    status: success
+                    provider_charge_id: charge_example
+                summary: Payment settled
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentEventResponse'
+              examples:
+                Example:
+                  value:
+                    status: ok
+          description: OK
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: service_unavailable
+                    message: Payment event verification is temporarily unavailable.
+                    fields: {}
+          description: Service Unavailable
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: validation_error
+                    message: Request validation failed.
+                    fields:
+                      non_field_errors:
+                      - Invalid request.
+          description: Bad Request
+        '415':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: unsupported_media_type
+                    message: Unsupported request media type.
+                    fields: {}
+          description: Unsupported Media Type
+  /health/:
+    get:
+      operationId: getHealth
+      summary: Check application liveness
+      tags:
+      - Health
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                Example:
+                  value:
+                    status: ok
+          description: OK
+        '405':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: method_not_allowed
+                    message: Method is not allowed.
+                    fields: {}
+          description: Method Not Allowed
+        '406':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: not_acceptable
+                    message: Could not satisfy the request Accept header.
+                    fields: {}
+          description: Not Acceptable
+        '500':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                Example:
+                  value:
+                    code: internal_error
+                    message: An unexpected server error occurred.
+                    fields: {}
+          description: Internal Server Error
+components:
+  schemas:
+    AcceptInvitationRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 64
+      required:
+      - token
+      additionalProperties: false
+    ApiKeyCreatedResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        prefix:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        expires_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
+        revoked:
+          type: boolean
+          readOnly: true
+        scope:
+          allOf:
+          - $ref: '#/components/schemas/ApiKeyScopeEnum'
+          readOnly: true
+        key:
+          type: string
+      required:
+      - created_at
+      - expires_at
+      - id
+      - key
+      - name
+      - prefix
+      - revoked
+      - scope
+    ApiKeyPage:
+      type: object
+      required:
+      - next
+      - previous
+      - results
+      properties:
+        next:
+          type:
+          - string
+          - 'null'
+          format: uri
+        previous:
+          type:
+          - string
+          - 'null'
+          format: uri
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiKeyResponse'
+    ApiKeyResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        prefix:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        expires_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
+        revoked:
+          type: boolean
+          readOnly: true
+        scope:
+          allOf:
+          - $ref: '#/components/schemas/ApiKeyScopeEnum'
+          readOnly: true
+      required:
+      - created_at
+      - expires_at
+      - id
+      - name
+      - prefix
+      - revoked
+      - scope
+    ApiKeyScopeEnum:
+      enum:
+      - read
+      - read_write
+      type: string
+    BillingIntervalEnum:
+      enum:
+      - day
+      - week
+      - month
+      - year
+      type: string
+    CancellationReasonEnum:
+      enum:
+      - voluntary
+      - non_payment
+      type: string
+    CreateApiKeyRequest:
+      type: object
+      properties:
+        scope:
+          allOf:
+          - $ref: '#/components/schemas/ApiKeyScopeEnum'
+          default: read_write
+        name:
+          type: string
+          minLength: 1
+          default: Default
+          maxLength: 100
+        expires_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      additionalProperties: false
+    CreateCustomerRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        provider_customer_id:
+          type: string
+          maxLength: 255
+        provider_payment_method_id:
+          type: string
+          maxLength: 255
+      required:
+      - email
+      - name
+      additionalProperties: false
+    CreateInvitationRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        role:
+          $ref: '#/components/schemas/InvitationRoleEnum'
+      required:
+      - email
+      - role
+      additionalProperties: false
+    CreateOrganizationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+      - name
+      additionalProperties: false
+    CreatePaymentAttemptRequest:
+      type: object
+      properties:
+        invoice_id:
+          type: integer
+          minimum: 1
+      required:
+      - invoice_id
+      additionalProperties: false
+    CreatePlanRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        currency:
+          allOf:
+          - $ref: '#/components/schemas/CurrencyEnum'
+          default: USD
+        status:
+          $ref: '#/components/schemas/PlanStatusEnum'
+        interval:
+          $ref: '#/components/schemas/BillingIntervalEnum'
+        trial_period_days:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      required:
+      - name
+      - price
+      additionalProperties: false
+    CreateSubscriptionRequest:
+      type: object
+      properties:
+        customer_id:
+          type: integer
+          minimum: 1
+        plan_id:
+          type: integer
+          minimum: 1
+      required:
+      - customer_id
+      - plan_id
+      additionalProperties: false
+    CurrencyEnum:
+      enum:
+      - AED
+      - AFN
+      - ALL
+      - AMD
+      - AOA
+      - ARS
+      - AUD
+      - AWG
+      - AZN
+      - BAM
+      - BBD
+      - BDT
+      - BHD
+      - BIF
+      - BMD
+      - BND
+      - BOB
+      - BOV
+      - BRL
+      - BSD
+      - BTN
+      - BWP
+      - BYN
+      - BZD
+      - CAD
+      - CDF
+      - CHE
+      - CHF
+      - CHW
+      - CLF
+      - CLP
+      - CNY
+      - COP
+      - COU
+      - CRC
+      - CUP
+      - CVE
+      - CZK
+      - DJF
+      - DKK
+      - DOP
+      - DZD
+      - EGP
+      - ERN
+      - ETB
+      - EUR
+      - FJD
+      - FKP
+      - GBP
+      - GEL
+      - GHS
+      - GIP
+      - GMD
+      - GNF
+      - GTQ
+      - GYD
+      - HKD
+      - HNL
+      - HTG
+      - HUF
+      - IDR
+      - ILS
+      - INR
+      - IQD
+      - IRR
+      - ISK
+      - JMD
+      - JOD
+      - JPY
+      - KES
+      - KGS
+      - KHR
+      - KMF
+      - KPW
+      - KRW
+      - KWD
+      - KYD
+      - KZT
+      - LAK
+      - LBP
+      - LKR
+      - LRD
+      - LSL
+      - LYD
+      - MAD
+      - MDL
+      - MGA
+      - MKD
+      - MMK
+      - MNT
+      - MOP
+      - MRU
+      - MUR
+      - MVR
+      - MWK
+      - MXN
+      - MXV
+      - MYR
+      - MZN
+      - NAD
+      - NGN
+      - NIO
+      - NOK
+      - NPR
+      - NZD
+      - OMR
+      - PAB
+      - PEN
+      - PGK
+      - PHP
+      - PKR
+      - PLN
+      - PYG
+      - QAR
+      - RON
+      - RSD
+      - RUB
+      - RWF
+      - SAR
+      - SBD
+      - SCR
+      - SDG
+      - SEK
+      - SGD
+      - SHP
+      - SLE
+      - SOS
+      - SRD
+      - SSP
+      - STN
+      - SVC
+      - SYP
+      - SZL
+      - THB
+      - TJS
+      - TMT
+      - TND
+      - TOP
+      - TRY
+      - TTD
+      - TWD
+      - TZS
+      - UAH
+      - UGX
+      - USD
+      - USN
+      - UYI
+      - UYU
+      - UYW
+      - UZS
+      - VED
+      - VES
+      - VND
+      - VUV
+      - WST
+      - XAD
+      - XAF
+      - XAG
+      - XAU
+      - XBA
+      - XBB
+      - XBC
+      - XBD
+      - XCD
+      - XCG
+      - XDR
+      - XOF
+      - XPD
+      - XPF
+      - XPT
+      - XSU
+      - XTS
+      - XUA
+      - XXX
+      - YER
+      - ZAR
+      - ZMW
+      - ZWG
+      type: string
+    CustomerPage:
+      type: object
+      required:
+      - next
+      - previous
+      - results
+      properties:
+        next:
+          type:
+          - string
+          - 'null'
+          format: uri
+        previous:
+          type:
+          - string
+          - 'null'
+          format: uri
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerResponse'
+    CustomerResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        provider_customer_id:
+          type: string
+          readOnly: true
+        provider_payment_method_id:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - email
+      - id
+      - name
+      - provider_customer_id
+      - provider_payment_method_id
+      - updated_at
+    ErrorCodeEnum:
+      enum:
+      - validation_error
+      - invalid_request
+      - parse_error
+      - not_authenticated
+      - authentication_failed
+      - permission_denied
+      - organization_required
+      - organization_ambiguous
+      - organization_forbidden
+      - not_found
+      - method_not_allowed
+      - not_acceptable
+      - unsupported_media_type
+      - throttled
+      - invalid_transition
+      - renewal_not_due
+      - plan_not_active
+      - invoice_not_payable
+      - idempotency_conflict
+      - subscription_exists
+      - invalid_webhook_signature
+      - service_unavailable
+      - internal_error
+      type: string
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCodeEnum'
+        message:
+          type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+      required:
+      - code
+      - fields
+      - message
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/HealthStatusEnum'
+      required:
+      - status
+    HealthStatusEnum:
+      enum:
+      - ok
+      type: string
+    InvitationCreatedResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+        accepted_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        token:
+          type: string
+      required:
+      - accepted_at
+      - created_at
+      - email
+      - expires_at
+      - id
+      - role
+      - token
+    InvitationPage:
+      type: object
+      required:
+      - next
+      - previous
+      - results
+      properties:
+        next:
+          type:
+          - string
+          - 'null'
+          format: uri
+        previous:
+          type:
+          - string
+          - 'null'
+          format: uri
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvitationResponse'
+    InvitationResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+        accepted_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - accepted_at
+      - created_at
+      - email
+      - expires_at
+      - id
+      - role
+    InvitationRoleEnum:
+      enum:
+      - admin
+      - member
+      type: string
+    InvoiceLineResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+      required:
+      - amount
+      - description
+      - id
+    InvoicePage:
+      type: object
+      required:
+      - next
+      - previous
+      - results
+      properties:
+        next:
+          type:
+          - string
+          - 'null'
+          format: uri
+        previous:
+          type:
+          - string
+          - 'null'
+          format: uri
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceResponse'
+    InvoiceResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        subscription_id:
+          type: integer
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/InvoiceStatusEnum'
+          readOnly: true
+        total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+        currency:
+          type: string
+          readOnly: true
+        period_start:
+          type: string
+          format: date-time
+          readOnly: true
+        period_end:
+          type: string
+          format: date-time
+          readOnly: true
+        first_failed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
+        next_retry_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
+        attempt_count:
+          type: integer
+          readOnly: true
+        issued_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
+        paid_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceLineResponse'
+          readOnly: true
+      required:
+      - attempt_count
+      - created_at
+      - currency
+      - first_failed_at
+      - id
+      - issued_at
+      - lines
+      - next_retry_at
+      - paid_at
+      - period_end
+      - period_start
+      - status
+      - subscription_id
+      - total
+      - updated_at
+    InvoiceStatusEnum:
+      enum:
+      - draft
+      - issued
+      - paid
+      - failed
+      - overdue
+      - canceled
+      type: string
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - email
+      - password
+      additionalProperties: false
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+      required:
+      - token
+    MeResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/UserResponse'
+        organization:
+          oneOf:
+          - $ref: '#/components/schemas/OrganizationResponse'
+          - type: 'null'
+        role:
+          oneOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          - type: 'null'
+      required:
+      - organization
+      - role
+      - user
+    MembershipPage:
+      type: object
+      required:
+      - next
+      - previous
+      - results
+      properties:
+        next:
+          type:
+          - string
+          - 'null'
+          format: uri
+        previous:
+          type:
+          - string
+          - 'null'
+          format: uri
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipResponse'
+    MembershipResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        user_email:
+          type: string
+          format: email
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          readOnly: true
+        joined_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - joined_at
+      - role
+      - user_email
+    OrganizationCreatedResponse:
+      type: object
+      properties:
+        organization:
+          $ref: '#/components/schemas/OrganizationResponse'
+        api_key:
+          $ref: '#/components/schemas/ApiKeyCreatedResponse'
+      required:
+      - api_key
+      - organization
+    OrganizationPage:
+      type: object
+      required:
+      - next
+      - previous
+      - results
+      properties:
+        next:
+          type:
+          - string
+          - 'null'
+          format: uri
+        previous:
+          type:
+          - string
+          - 'null'
+          format: uri
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationResponse'
+    OrganizationResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        my_role:
+          readOnly: true
+          oneOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          - type: 'null'
+      required:
+      - created_at
+      - id
+      - my_role
+      - name
+      - updated_at
+    PaymentAttemptPage:
+      type: object
+      required:
+      - next
+      - previous
+      - results
+      properties:
+        next:
+          type:
+          - string
+          - 'null'
+          format: uri
+        previous:
+          type:
+          - string
+          - 'null'
+          format: uri
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentAttemptResponse'
+    PaymentAttemptResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        invoice_id:
+          type: integer
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/PaymentStatusEnum'
+          readOnly: true
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+        currency:
+          type: string
+          readOnly: true
+        provider:
+          type: string
+          readOnly: true
+          default: mock
+        provider_charge_id:
+          type: string
+          readOnly: true
+          default: ''
+        attempted_at:
+          type: string
+          format: date-time
+          readOnly: true
+        needs_reconciliation:
+          type: boolean
+          readOnly: true
+      required:
+      - amount
+      - attempted_at
+      - currency
+      - id
+      - invoice_id
+      - needs_reconciliation
+      - provider
+      - provider_charge_id
+      - status
+    PaymentEventPayloadRequest:
+      type: object
+      properties:
+        payment_attempt_id:
+          type: integer
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/PaymentEventStatusEnum'
+        provider_charge_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+      - payment_attempt_id
+      - provider_charge_id
+      - status
+      additionalProperties: false
+    PaymentEventRequest:
+      type: object
+      properties:
+        provider:
+          $ref: '#/components/schemas/PaymentProviderEnum'
+        provider_event_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        event_type:
+          type: string
+          minLength: 1
+          maxLength: 255
+        payload:
+          $ref: '#/components/schemas/PaymentEventPayloadRequest'
+      required:
+      - event_type
+      - payload
+      - provider
+      - provider_event_id
+      additionalProperties: false
+    PaymentEventResponse:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/HealthStatusEnum'
+      required:
+      - status
+    PaymentEventStatusEnum:
+      enum:
+      - success
+      - failed
+      type: string
+    PaymentProviderEnum:
+      enum:
+      - mock
+      type: string
+    PaymentStatusEnum:
+      enum:
+      - pending
+      - success
+      - failed
+      type: string
+    PlanPage:
+      type: object
+      required:
+      - next
+      - previous
+      - results
+      properties:
+        next:
+          type:
+          - string
+          - 'null'
+          format: uri
+        previous:
+          type:
+          - string
+          - 'null'
+          format: uri
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanResponse'
+    PlanResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+        currency:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/PlanStatusEnum'
+          readOnly: true
+        interval:
+          allOf:
+          - $ref: '#/components/schemas/BillingIntervalEnum'
+          readOnly: true
+        trial_period_days:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - currency
+      - description
+      - id
+      - interval
+      - name
+      - price
+      - status
+      - trial_period_days
+      - updated_at
+    PlanStatusEnum:
+      enum:
+      - active
+      - archived
+      type: string
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+      required:
+      - email
+      - password
+      additionalProperties: false
+    RegisterResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/UserResponse'
+      required:
+      - token
+      - user
+    RoleEnum:
+      enum:
+      - owner
+      - admin
+      - member
+      type: string
+    SubscriptionPage:
+      type: object
+      required:
+      - next
+      - previous
+      - results
+      properties:
+        next:
+          type:
+          - string
+          - 'null'
+          format: uri
+        previous:
+          type:
+          - string
+          - 'null'
+          format: uri
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubscriptionResponse'
+    SubscriptionResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        customer_id:
+          type: integer
+          readOnly: true
+        plan_id:
+          type: integer
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/SubscriptionStatusEnum'
+          readOnly: true
+        current_period_start:
+          type: string
+          format: date-time
+          readOnly: true
+        current_period_end:
+          type: string
+          format: date-time
+          readOnly: true
+        canceled_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
+        canceled_reason:
+          readOnly: true
+          oneOf:
+          - $ref: '#/components/schemas/CancellationReasonEnum'
+          - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - canceled_at
+      - canceled_reason
+      - created_at
+      - current_period_end
+      - current_period_start
+      - customer_id
+      - id
+      - plan_id
+      - status
+      - updated_at
+    SubscriptionStatusEnum:
+      enum:
+      - trial
+      - active
+      - overdue
+      - canceled
+      type: string
+    UpdateCustomerRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 254
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        provider_customer_id:
+          type: string
+          maxLength: 255
+        provider_payment_method_id:
+          type: string
+          maxLength: 255
+      additionalProperties: false
+    UpdatePlanRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        currency:
+          allOf:
+          - $ref: '#/components/schemas/CurrencyEnum'
+          default: USD
+        status:
+          $ref: '#/components/schemas/PlanStatusEnum'
+        interval:
+          $ref: '#/components/schemas/BillingIntervalEnum'
+        trial_period_days:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+      additionalProperties: false
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+      required:
+      - email
+      - id
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: cf_<secret>
+      description: cf_<key>
+    tokenAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Token <token>
+tags:
+- name: Health
+- name: Authentication
+- name: Account
+- name: Organizations
+- name: API keys
+- name: Team
+- name: Customers
+- name: Plans
+- name: Subscriptions
+- name: Invoices
+- name: Payments
+- name: Provider webhooks
