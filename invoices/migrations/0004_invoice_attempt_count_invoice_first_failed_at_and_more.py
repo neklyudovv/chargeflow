@@ -12,8 +12,9 @@ def backfill(apps, schema_editor):
         payments = Payment.objects.using(alias).filter(invoice_id=invoice.pk)
         invoice.attempt_count = payments.count()
         failures = payments.filter(status="failed")
+        invoice.first_failed_at = failures.order_by("attempted_at").values_list("attempted_at", flat=True).first()
         if invoice.status == "failed":
-            invoice.first_failed_at = failures.order_by("attempted_at").values_list("attempted_at", flat=True).first() or invoice.updated_at
+            invoice.first_failed_at = invoice.first_failed_at or invoice.updated_at
             failed_count = failures.count()
             invoice.next_retry_at = (invoice.first_failed_at + timedelta(days=(1, 3, 7)[max(failed_count, 1) - 1]) if failed_count < 4 else timezone.now())
         invoice.save(update_fields=["attempt_count", "first_failed_at", "next_retry_at"])
