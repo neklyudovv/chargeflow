@@ -86,8 +86,11 @@ def test_concurrent_provider_charge_id_is_applied_to_only_one_invoice(
         status=SubscriptionStatus.ACTIVE
     )
     Invoice.objects.filter(pk=invoice.pk).update(status=InvoiceStatus.ISSUED)
+    from accounts.models import Customer
+
+    other_customer = Customer.objects.create(organization=customer.organization, email="second@example.com")
     second_subscription = Subscription.objects.create(
-        customer=customer,
+        customer=other_customer,
         plan=plan,
         status=SubscriptionStatus.ACTIVE,
         current_period_start=now + timedelta(days=31),

@@ -192,6 +192,7 @@ def test_second_success_for_an_invoice_is_flagged_not_applied(
     with django_capture_on_commit_callbacks(execute=True):
         p1 = PaymentService.attempt(invoice)
     _accept(monkeypatch)
+    Invoice.objects.filter(pk=invoice.pk).update(next_retry_at=timezone.now() - timedelta(seconds=1))
     with django_capture_on_commit_callbacks(execute=True):
         run_dunning()
     invoice.refresh_from_db()

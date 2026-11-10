@@ -46,6 +46,8 @@ class Subscription(models.Model):
     )
     current_period_start = models.DateTimeField()
     current_period_end = models.DateTimeField()
+    billing_anchor_day = models.PositiveSmallIntegerField(null=True, blank=True)
+    idempotency_key = models.CharField(max_length=255, null=True, blank=True)
     canceled_at = models.DateTimeField(null=True, blank=True)
     canceled_reason = models.CharField(
         max_length=20, choices=CancellationReason.choices, null=True, blank=True
@@ -55,6 +57,17 @@ class Subscription(models.Model):
 
     class Meta:
         app_label = "subscriptions"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["customer", "plan"],
+                condition=models.Q(status__in=["trial", "active", "overdue"]),
+                name="one_live_subscription_per_customer_plan",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "idempotency_key"],
+                name="unique_project_subscription_key",
+            ),
+        ]
 
     def clean(self):
         if self.customer_id is None or self.plan_id is None:

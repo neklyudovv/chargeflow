@@ -116,7 +116,7 @@ def test_payment_keys_are_independent_between_projects(organization, user, subsc
 def test_concurrent_key_reuse_on_distinct_invoices_conflicts(organization, customer, plan):
     plan.trial_period_days = 1
     plan.save()
-    subscriptions = [SubscriptionService.create(customer, plan) for _ in range(2)]
+    subscriptions = [SubscriptionService.create(Customer.objects.create(organization=organization, email=f"customer-{number}@example.com"), plan) for number in range(2)]
     invoices = [issue_invoice(subscription) for subscription in subscriptions]
     barrier = Barrier(2)
 
@@ -209,7 +209,8 @@ def test_key_serialization_does_not_deadlock_new_billing_foreign_keys(organizati
             with transaction.atomic():
                 with connection.cursor() as cursor:
                     cursor.execute("SET LOCAL lock_timeout = '5s'")
-                subscription = SubscriptionService.create(customer, plan)
+                separate_customer = Customer.objects.create(organization=organization, email=f"parallel-{number}@example.com")
+                subscription = SubscriptionService.create(separate_customer, plan)
                 invoice = issue_invoice(subscription)
             barrier.wait(timeout=10)
             PaymentService.attempt(invoice, f"new-key-{number}")

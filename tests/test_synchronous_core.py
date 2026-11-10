@@ -12,7 +12,8 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from invoices.domain.models import Invoice, InvoiceStatus
-from invoices.tasks import MAX_DUNNING_ATTEMPTS, _dun_invoice, run_dunning
+from invoices.application.services import InvoiceService
+from invoices.tasks import run_dunning
 from payments.application.gateway import ChargeResult
 from payments.application.services import PaymentService, get_payment_gateway
 from payments.domain.models import PaymentAttempt, PaymentStatus
@@ -118,11 +119,12 @@ def test_dunning_exhaustion_closes_the_subscription_in_the_same_transaction(
 ):
     _force(subscription, SubscriptionStatus.OVERDUE)
     _force(invoice, InvoiceStatus.FAILED)
-    for _ in range(MAX_DUNNING_ATTEMPTS):
+    for _ in range(4):
         PaymentAttempt.objects.create(
             invoice=invoice, amount=invoice.total, status=PaymentStatus.FAILED
         )
 
+    Invoice.objects.filter(pk=invoice.pk).update(next_retry_at=timezone.now() - timedelta(seconds=1))
     with django_capture_on_commit_callbacks(execute=False):
         run_dunning()
 
@@ -186,12 +188,12 @@ def test_dunning_does_not_cancel_a_subscription_whose_invoice_got_paid_meanwhile
     # run_dunning listed the invoice as FAILED; a payment settled it before its turn came
     _force(subscription, SubscriptionStatus.ACTIVE)
     _force(invoice, InvoiceStatus.PAID)
-    for _ in range(MAX_DUNNING_ATTEMPTS):
+    for _ in range(4):
         PaymentAttempt.objects.create(
             invoice=invoice, amount=invoice.total, status=PaymentStatus.FAILED
         )
 
-    _dun_invoice(invoice.pk)
+    InvoiceService.retry_due(invoice.pk)
 
     subscription.refresh_from_db()
     assert subscription.status == SubscriptionStatus.ACTIVE
@@ -220,11 +222,12 @@ def _webhook(subscription, invoice):
 
 def _dunning_exhaustion(subscription, invoice):
     _force(invoice, InvoiceStatus.FAILED)
-    for _ in range(MAX_DUNNING_ATTEMPTS):
+    for _ in range(4):
         PaymentAttempt.objects.create(
             invoice=invoice, amount=invoice.total, status=PaymentStatus.FAILED
         )
-    _dun_invoice(invoice.pk)
+    Invoice.objects.filter(pk=invoice.pk).update(next_retry_at=timezone.now() - timedelta(seconds=1))
+    InvoiceService.retry_due(invoice.pk)
 
 
 def _cancel(subscription, invoice):

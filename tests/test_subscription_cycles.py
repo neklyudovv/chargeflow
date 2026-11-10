@@ -82,8 +82,11 @@ def test_one_bad_subscription_does_not_hold_up_the_batch(
     from subscriptions.domain.models import Subscription
 
     _set(subscription, SubscriptionStatus.ACTIVE, timezone.now() - timedelta(hours=1))
+    from accounts.models import Customer
+
+    healthy_customer = Customer.objects.create(organization=customer.organization, email="healthy@example.com")
     healthy = Subscription.objects.create(
-        customer=customer,
+        customer=healthy_customer,
         plan=plan,
         status=SubscriptionStatus.ACTIVE,
         current_period_start=timezone.now() - timedelta(days=31),
