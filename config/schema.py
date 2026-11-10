@@ -2,11 +2,22 @@ from http import HTTPStatus
 
 from drf_spectacular.openapi import AutoSchema
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes
+from rest_framework import serializers
 
 from config.api import ErrorResponse
 
 
 class PublicSchema(AutoSchema):
+    def _map_serializer_field(self, field, direction, bypass_extensions=False):
+        schema = super()._map_serializer_field(field, direction, bypass_extensions)
+        if (
+            direction == "request" and isinstance(field, serializers.DecimalField)
+            and field.min_value is not None and field.min_value >= 0 and schema.get("pattern")
+        ):
+            # decimal strings need a pattern to express the nonnegative numeric bound
+            schema["pattern"] = schema["pattern"].replace("^-?", "^", 1)
+        return schema
+
     def get_serializer_name(self, serializer, direction):
         name = super().get_serializer_name(serializer, direction)
         if direction == "request" and name.endswith("Request"):
