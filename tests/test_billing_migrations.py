@@ -8,7 +8,8 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 
 @pytest.mark.parametrize("duplicate", [False, True])
-def test_existing_billing_data_is_backfilled_or_rejected_safely(duplicate):
+@pytest.mark.parametrize("invoice_status", ["failed", "issued"])
+def test_existing_billing_data_is_backfilled_or_rejected_safely(duplicate, invoice_status):
     previous = [("subscriptions", "0003_subscription_organization"), ("invoices", "0003_invoice_organization"), ("payments", "0005_payment_gateway"), ("plans", "0001_initial")]
     executor = MigrationExecutor(connection)
     latest = executor.loader.graph.leaf_nodes()
@@ -24,9 +25,12 @@ def test_existing_billing_data_is_backfilled_or_rejected_safely(duplicate):
         subscriptions = apps.get_model("subscriptions", "Subscription").objects
         values = dict(organization=org, customer=customer, plan=plan, status="overdue", current_period_start=start, current_period_end=start + timedelta(days=29))
         sub = subscriptions.create(**values)
-        invoice = apps.get_model("invoices", "Invoice").objects.create(organization=org, subscription=sub, status="failed", total="1.00", currency="USD", period_start=start, period_end=sub.current_period_end)
+        invoice = apps.get_model("invoices", "Invoice").objects.create(organization=org, subscription=sub, status=invoice_status, total="1.00", currency="USD", period_start=start, period_end=sub.current_period_end)
         payment = apps.get_model("payments", "PaymentAttempt").objects.create(organization=org, invoice=invoice, amount="1.00", status="failed", provider_idempotency_key="historic-billing")
         apps.get_model("payments", "PaymentAttempt").objects.filter(pk=payment.pk).update(attempted_at=start)
+        retry = None
+        if invoice_status == "issued":
+            retry = apps.get_model("payments", "PaymentAttempt").objects.create(organization=org, invoice=invoice, amount="1.00", provider_idempotency_key="historic-retry")
         if duplicate:
             duplicate_pk = subscriptions.create(**values).pk
             with pytest.raises(ValueError, match="duplicate live"):
@@ -37,9 +41,17 @@ def test_existing_billing_data_is_backfilled_or_rejected_safely(duplicate):
         from invoices.domain.models import Invoice
         from subscriptions.domain.models import Subscription
         migrated = Invoice.objects.get(pk=invoice.pk)
-        assert migrated.attempt_count == 1
+        assert migrated.attempt_count == (2 if retry else 1)
         assert migrated.first_failed_at == start
-        assert migrated.next_retry_at == start + timedelta(days=1)
+        assert migrated.next_retry_at == (None if retry else start + timedelta(days=1))
+        if retry:
+            from payments.application.services import PaymentService
+            from payments.domain.models import PaymentAttempt
+
+            PaymentService.settle(PaymentAttempt.objects.get(pk=retry.pk), False, {})
+            migrated.refresh_from_db()
+            assert migrated.first_failed_at == start
+            assert migrated.next_retry_at == start + timedelta(days=3)
         assert Subscription.objects.get(pk=sub.pk).billing_anchor_day == 31
     finally:
         if duplicate_pk:
