@@ -28,7 +28,6 @@ paths:
         schema:
           type: string
           minLength: 1
-          format: byte
       - name: page_size
         required: false
         in: query
@@ -696,7 +695,6 @@ paths:
         schema:
           type: string
           minLength: 1
-          format: byte
       - in: query
         name: email
         schema:
@@ -1304,7 +1302,6 @@ paths:
         schema:
           type: string
           minLength: 1
-          format: byte
       - in: query
         name: email
         schema:
@@ -1748,7 +1745,6 @@ paths:
         schema:
           type: string
           minLength: 1
-          format: byte
       - in: query
         name: customer_id
         schema:
@@ -2215,7 +2211,6 @@ paths:
         schema:
           type: string
           minLength: 1
-          format: byte
       - name: page_size
         required: false
         in: query
@@ -2369,7 +2364,6 @@ paths:
         schema:
           type: string
           minLength: 1
-          format: byte
       - name: page_size
         required: false
         in: query
@@ -2668,7 +2662,6 @@ paths:
         schema:
           type: string
           minLength: 1
-          format: byte
       - in: query
         name: invoice_id
         schema:
@@ -3337,7 +3330,6 @@ paths:
         schema:
           type: string
           minLength: 1
-          format: byte
       - name: page_size
         required: false
         in: query
@@ -4091,7 +4083,6 @@ paths:
         schema:
           type: string
           minLength: 1
-          format: byte
       - in: query
         name: customer_id
         schema:

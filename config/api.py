@@ -150,7 +150,7 @@ class CursorPage(CursorPagination):
         for param in params:
             param.pop("description", None)
             if param["name"] == "cursor":
-                param["schema"].update(minLength=1, format="byte")
+                param["schema"].update(minLength=1)
             if param["name"] == "page_size":
                 param["schema"].update(minimum=1, maximum=100, default=25)
         return params
