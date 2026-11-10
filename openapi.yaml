@@ -6,7 +6,7 @@ paths:
   /api/v1/api-keys/:
     get:
       operationId: listApiKeys
-      summary: List active API keys
+      summary: List API keys
       parameters:
       - in: header
         name: X-Organization-Id
@@ -27,6 +27,8 @@ paths:
         in: query
         schema:
           type: string
+          minLength: 1
+          format: byte
       - name: page_size
         required: false
         in: query
@@ -693,6 +695,8 @@ paths:
         in: query
         schema:
           type: string
+          minLength: 1
+          format: byte
       - in: query
         name: email
         schema:
@@ -1278,7 +1282,7 @@ paths:
   /api/v1/invitations/:
     get:
       operationId: listInvitations
-      summary: List pending invitations
+      summary: List invitations
       parameters:
       - in: header
         name: X-Organization-Id
@@ -1299,6 +1303,8 @@ paths:
         in: query
         schema:
           type: string
+          minLength: 1
+          format: byte
       - in: query
         name: email
         schema:
@@ -1741,6 +1747,8 @@ paths:
         in: query
         schema:
           type: string
+          minLength: 1
+          format: byte
       - in: query
         name: customer_id
         schema:
@@ -2206,6 +2214,8 @@ paths:
         in: query
         schema:
           type: string
+          minLength: 1
+          format: byte
       - name: page_size
         required: false
         in: query
@@ -2358,6 +2368,8 @@ paths:
         in: query
         schema:
           type: string
+          minLength: 1
+          format: byte
       - name: page_size
         required: false
         in: query
@@ -2655,6 +2667,8 @@ paths:
         in: query
         schema:
           type: string
+          minLength: 1
+          format: byte
       - in: query
         name: invoice_id
         schema:
@@ -3322,6 +3336,8 @@ paths:
         in: query
         schema:
           type: string
+          minLength: 1
+          format: byte
       - name: page_size
         required: false
         in: query
@@ -4074,6 +4090,8 @@ paths:
         in: query
         schema:
           type: string
+          minLength: 1
+          format: byte
       - in: query
         name: customer_id
         schema:

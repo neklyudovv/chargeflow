@@ -1,13 +1,14 @@
 import logging
+from base64 import b64decode
+from binascii import Error as Base64Error
 
 from django.core.exceptions import ValidationError as ModelValidationError
 from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
-from rest_framework.exceptions import APIException, ValidationError
+from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.filters import BaseFilterBackend
 from rest_framework.pagination import CursorPagination
 from rest_framework.response import Response
-from rest_framework.views import exception_handler as drf_exception_handler, set_rollback
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,9 @@ def field_errors(detail, prefix=""):
 
 
 def exception_handler(exc, context):
+    # defer view imports until DRF finishes loading its configured throttles
+    from rest_framework.views import exception_handler as drf_exception_handler, set_rollback
+
     if isinstance(exc, ModelValidationError):
         exc = ValidationError(exc.message_dict if hasattr(exc, "message_dict") else exc.messages)
     response = drf_exception_handler(exc, context)
@@ -113,6 +117,20 @@ class CursorPage(CursorPagination):
     page_size_query_param = "page_size"
     max_page_size = 100
 
+    def decode_cursor(self, request):
+        raw = request.query_params.get(self.cursor_query_param)
+        if raw is not None:
+            try:
+                if not raw:
+                    raise ValueError
+                b64decode(raw.encode("ascii"), validate=True)
+            except (Base64Error, UnicodeError, ValueError):
+                raise ValidationError({"cursor": ["Invalid cursor."]})
+        try:
+            return super().decode_cursor(request)
+        except NotFound:
+            raise ValidationError({"cursor": ["Invalid cursor."]})
+
     def get_ordering(self, request, queryset, view):
         return (f"-{getattr(view, 'timestamp_field', 'created_at')}", "-id")
 
@@ -131,6 +149,8 @@ class CursorPage(CursorPagination):
         params = super().get_schema_operation_parameters(view)
         for param in params:
             param.pop("description", None)
+            if param["name"] == "cursor":
+                param["schema"].update(minLength=1, format="byte")
             if param["name"] == "page_size":
                 param["schema"].update(minimum=1, maximum=100, default=25)
         return params
@@ -154,7 +174,7 @@ class QueryFilters(BaseFilterBackend):
     def filter_queryset(self, request, queryset, view):
         if view.action != "list":
             return queryset
-        query = view.filter_serializer_class(data=request.query_params)
+        query = view.filter_serializer_class(data={name: request.query_params[name] for name in request.query_params})
         allowed = set(query.fields) | {"cursor", "page_size", "format"}
         unknown = set(request.query_params) - allowed
         if unknown:
